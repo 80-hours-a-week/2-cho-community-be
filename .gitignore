@@ -1,7 +1,13 @@
+
+# 가상 환경
 .venv/
+
+# 컴파일된 결과물
 __pycache__/
 *.pyc
 .DS_Store
-
 *.egg-info/
 build/
+
+# 추적할 필요가 없는 파일들
+.env
