@@ -3,9 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 from os import getenv
+from routers.auth_router import auth_router
+from routers.user_router import user_router
 
+# .env 로드
 load_dotenv()
 
+# FastAPI 인스턴스 생성
 app = FastAPI()
 
 # SessionMiddleware: 모든 요청과 응답에서 세션을 처리.
@@ -31,3 +35,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 라우터 추가
+app.include_router(auth_router)
+app.include_router(user_router)

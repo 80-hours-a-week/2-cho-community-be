@@ -1,24 +1,26 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 from controllers import user_controller
-from main import app
 
-user_router = APIRouter(prefix="/v1/users")
-app.include_router(user_router, tags=["users"])
-
-
-# 모든 유저의 목록을 획득
-@user_router.get("/all")
-def get_users():
-    return user_controller.get_users()
-
-
-# 사용자 ID로 유저 정보 얻기
-@user_router.get("/{user_id}")
-def get_user(user_id: int):
-    return user_controller.get_user(user_id)
+# 라우터 생성
+user_router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
 # 사용자 생성
-@user_router.post("", status_code=status.HTTP_201_CREATED)
-def create_user(data: dict):
-    return user_controller.create_user(data)
+@user_router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_user(request: Request):
+    return await user_controller.create_user(request)
+
+
+# 내 정보 얻기
+@user_router.get("/me", status_code=status.HTTP_200_OK)
+async def get_my_info(request: Request):
+    return await user_controller.get_my_info(request)
+
+
+# 사용자 닉네임으로 유저 정보 얻기
+@user_router.get("/{nickname}", status_code=status.HTTP_200_OK)
+async def get_user(request: Request):
+    # 본인이라면 get_my_info로 처리
+    if request.path_params.get("nickname") == request.session.get("nickname"):
+        return await user_controller.get_my_info(request)
+    return await user_controller.get_user(request)
