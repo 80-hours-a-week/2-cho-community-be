@@ -151,6 +151,7 @@ async def create_user(request: Request):
             )
 
         # 비밀번호 형식 검사 (정규표현식)
+        # 반드시 대문자, 소문자, 특수문자가 각각 한 개 이상 들어가야 함.
         if not re.match(
             r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$",
             password,
@@ -575,6 +576,101 @@ async def change_password(request: Request):
             status_code=status.HTTP_200_OK,
         )
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "trackingID": str(uuid.uuid4()),
+                "error": str(e),
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+
+# 회원 탈퇴하기 (/v1/users/me)
+async def withdraw_user(request: Request):
+    try:
+        # 현재 세션 확인
+        session_id = request.session.get("session_id")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "unauthorized",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+
+        # 세션에 있는 이메일을 통해 현재 로그인한 사용자의 정보를 가져온다.
+        current_user = user_models.get_user_by_email(request.session.get("email"))
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "user_not_found",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+        if not current_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "inactive_user",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+
+        body = await request.json()
+        password_input = body.get("password")
+        agree = body.get("agree")
+        if password_input is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "password_input_required",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+        if agree is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "agreement_required",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+
+        if password_input != current_user.password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "invalid_password",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+
+        if not agree:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "agreement_required",
+                    "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+
+        content = {
+            "code": "WITHDRAWAL_ACCEPTED",
+            "message": "탈퇴 신청이 접수되었습니다.",
+            "data": {},
+            "errors": [],
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        return JSONResponse(
+            content=content,
+            status_code=status.HTTP_200_OK,
+        )
     except HTTPException:
         raise
     except Exception as e:
