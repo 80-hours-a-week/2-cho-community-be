@@ -283,3 +283,92 @@ async def get_user_info(request: Request):
                 "error": str(e),
             },
         )
+
+
+# 내 정보 수정하기 (/v1/users/me)
+async def update_user(request: Request):
+    try:
+        body = await request.json()
+        session_id = request.session.get("session_id")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="unauthorized",
+            )
+
+        # 세션에서 현재 로그인한 사용자 정보 가져오기
+        current_email = request.session.get("email")
+        current_user = user_models.get_user_by_email(current_email)
+
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="user_not_found",
+            )
+
+        if request.method != "PATCH":
+            raise HTTPException(
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                detail="method_not_allowed",
+            )
+
+        # 변경할 데이터 확인
+        nickname = body.get("nickname")
+
+        # 변경사항이 없는 경우
+        if not nickname:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="no_changes_provided",
+            )
+
+        # 1. 닉네임 형식 검사 (정규표현식)
+        if not re.match(r"^[a-zA-Z0-9_]{3,20}$", nickname):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="invalid_nickname_format",
+            )
+
+        # 2. 닉네임 중복 검사 (본인 닉네임인 경우 제외)
+        existing_user = user_models.get_user_by_nickname(nickname)
+        if existing_user and existing_user.id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="nickname_already_exists",
+            )
+
+        # 모델 업데이트 호출
+        updated_user = user_models.update_user(current_user.id, nickname=nickname)
+
+        # 세션 정보도 업데이트 (필요한 경우)
+        request.session["nickname"] = updated_user.nickname
+
+        content = {
+            "code": "UPDATE_SUCCESS",
+            "message": "유저 정보 수정에 성공했습니다.",
+            "data": {
+                "user": {
+                    "user_id": updated_user.id,
+                    "email": updated_user.email,
+                    "nickname": updated_user.nickname,
+                    "profileImageUrl": updated_user.profileImageUrl,
+                }
+            },
+            "errors": [],
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        return JSONResponse(
+            content=content,
+            status_code=status.HTTP_200_OK,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "trackingID": str(uuid.uuid4()),
+                "error": str(e),
+            },
+        )
