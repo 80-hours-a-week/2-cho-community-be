@@ -72,3 +72,13 @@ def update_user(user_id: int, **kwargs):
             _users[i] = updated_user
             return updated_user
     return None
+
+
+# 비밀번호 업데이트
+def update_password(user_id: int, new_password: str):
+    for i, user in enumerate(_users):
+        if user.id == user_id:
+            updated_user = replace(user, password=new_password)
+            _users[i] = updated_user
+            return updated_user
+    return None

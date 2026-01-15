@@ -31,3 +31,9 @@ async def get_user(request: Request):
 @user_router.patch("/me", status_code=status.HTTP_200_OK)
 async def update_user(request: Request):
     return await user_controller.update_user(request)
+
+
+# 비밀번호 변경하기
+@user_router.put("/me/password", status_code=status.HTTP_200_OK)
+async def change_password(request: Request):
+    return await user_controller.change_password(request)
