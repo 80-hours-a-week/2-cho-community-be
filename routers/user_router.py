@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request, status
 from controllers import user_controller
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_user, get_optional_user
 from models.user_models import User
 from schemas.user_schemas import (
     CreateUserRequest,
@@ -33,7 +33,7 @@ async def get_my_info(current_user: User = Depends(get_current_user)):
 async def get_user(
     nickname: str,
     request: Request,
-    current_user: User | None = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_user),
 ):
     # 본인의 프로필을 조회할 때는 get_my_info를 호출한다.
     if current_user and nickname == current_user.nickname:
