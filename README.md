@@ -2,6 +2,19 @@
 AWS AI School 2기 3주차 과제: 커뮤니티 백엔드 서버
 
 ## changelog
+- 2026-01-19: 게시글 관련 API 구현 완료
+    - 게시글 목록 조회: `GET /v1/posts` 엔드포인트 추가
+        - 페이지네이션 및 최신순 정렬 기능 구현
+    - 특정 게시글 상세 조회: `GET /v1/posts/{post_id}` 엔드포인트 추가
+    - 게시글 생성: `POST /v1/posts` 엔드포인트 추가
+        - 이미지 업로드 기능 구현
+    - 게시글 수정: `PATCH /v1/posts/{post_id}` 엔드포인트 추가
+    - 게시글 삭제: `DELETE /v1/posts/{post_id}` 엔드포인트 추가
+    - 게시글 좋아요: `POST /v1/posts/{post_id}/likes` 엔드포인트 추가
+    - 게시글 좋아요 취소: `DELETE /v1/posts/{post_id}/likes` 엔드포인트 추가
+    - 댓글 생성: `POST /v1/posts/{post_id}/comments` 엔드포인트 추가
+    - 댓글 수정: `PUT /v1/posts/{post_id}/comments/{comment_id}` 엔드포인트 추가
+    - 댓글 삭제: `DELETE /v1/posts/{post_id}/comments/{comment_id}` 엔드포인트 추가
 - 2026-01-17: 리팩토링
     - 스키마 패키지 추가, Pydantic 모델 도입
     - 라우터 재구성
