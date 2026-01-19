@@ -2,8 +2,10 @@
 
 from .auth_router import auth_router
 from .user_router import user_router
+from .post_router import post_router
 
 __all__ = [
     "auth_router",
     "user_router",
+    "post_router",
 ]
