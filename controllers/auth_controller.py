@@ -1,4 +1,7 @@
-# auth_controller: 인증 관련 컨트롤러 모듈
+"""auth_controller: 인증 관련 컨트롤러 모듈.
+
+로그인, 로그아웃, 사용자 인증 상태 확인 등의 기능을 제공합니다.
+"""
 
 import uuid
 from fastapi import HTTPException, Request, status
@@ -8,8 +11,16 @@ from schemas.auth_schemas import LoginRequest
 from dependencies.request_context import get_request_timestamp
 
 
-# 현재 로그인 중인 사용자의 정보를 반환
 async def get_my_info(current_user: User, request: Request) -> dict:
+    """현재 로그인 중인 사용자의 정보를 반환합니다.
+
+    Args:
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        사용자 정보가 포함된 응답 딕셔너리.
+    """
     timestamp = get_request_timestamp(request)
 
     return {
@@ -28,8 +39,19 @@ async def get_my_info(current_user: User, request: Request) -> dict:
     }
 
 
-# 이메일과 비밀번호를 사용하여 로그인
 async def login(credentials: LoginRequest, request: Request) -> dict:
+    """이메일과 비밀번호를 사용하여 로그인합니다.
+
+    Args:
+        credentials: 로그인 자격 증명 (이메일, 비밀번호).
+        request: FastAPI Request 객체.
+
+    Returns:
+        로그인 성공 시 사용자 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 인증 실패 시 401 Unauthorized.
+    """
     timestamp = get_request_timestamp(request)
 
     user = user_models.get_user_by_email(credentials.email)
@@ -43,7 +65,7 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
             },
         )
 
-    # 세션이 존재하지 않으면 새로 만든다.
+    # 세션이 존재하지 않으면 새로 생성
     session_id = request.session.get("session_id")
     if not session_id:
         session_id = str(uuid.uuid4())
@@ -67,8 +89,16 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
     }
 
 
-# 세션을 삭제하여 로그아웃
 async def logout(current_user: User, request: Request) -> dict:
+    """세션을 삭제하여 로그아웃합니다.
+
+    Args:
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        로그아웃 성공 응답 딕셔너리.
+    """
     timestamp = get_request_timestamp(request)
     request.session.clear()
 

@@ -1,9 +1,14 @@
-# routers: FastAPI의 라우터들을 모아놓은 패키지
+"""routers: FastAPI 라우터 패키지.
+
+인증, 사용자, 게시글 관련 API 엔드포인트를 정의하는 라우터 모듈을 제공합니다.
+"""
 
 from .auth_router import auth_router
 from .user_router import user_router
+from .post_router import post_router
 
 __all__ = [
     "auth_router",
     "user_router",
+    "post_router",
 ]

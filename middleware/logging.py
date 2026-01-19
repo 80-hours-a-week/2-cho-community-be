@@ -1,10 +1,14 @@
-# logging: 요청/응답 로깅 미들웨어
-# 모든 HTTP 요청과 응답에 로그를 남긴다.
+"""logging: 요청/응답 로깅 미들웨어 모듈.
+
+모든 HTTP 요청과 응답에 로그를 남깁니다.
+"""
 
 import logging
 import time
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
+
 
 # 로거 설정
 logger = logging.getLogger("api")
@@ -20,13 +24,24 @@ if not logger.handlers:
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """
-    요청/응답 로깅 미들웨어
+    """요청/응답 로깅 미들웨어.
 
-    모든 HTTP 요청의 메소드, 경로, 상태 코드, 처리 시간을 로그로 남긴다..
+    모든 HTTP 요청의 메소드, 경로, 상태 코드, 처리 시간을 로그로 남깁니다.
+
+    Attributes:
+        app: ASGI 애플리케이션.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        """요청을 처리하고 로그를 남깁니다.
+
+        Args:
+            request: 들어온 HTTP 요청.
+            call_next: 다음 미들웨어/라우터 호출 함수.
+
+        Returns:
+            HTTP 응답.
+        """
         # 요청 시작 시간
         start_time = time.time()
 
