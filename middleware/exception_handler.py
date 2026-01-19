@@ -1,4 +1,7 @@
-# exception_handler: 전역 예외 처리 핸들러
+"""exception_handler: 전역 예외 처리 핸들러 모듈.
+
+처리되지 않은 예외를 일관된 형식의 응답으로 변환합니다.
+"""
 
 import uuid
 import logging
@@ -6,14 +9,21 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from dependencies.request_context import get_request_timestamp
 
+
 logger = logging.getLogger("api")
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    전역 예외 처리 핸들러
+    """전역 예외 처리 핸들러.
 
     모든 예외를 잡아서 일관된 형식의 500 에러 응답을 반환합니다.
+
+    Args:
+        request: FastAPI Request 객체.
+        exc: 발생한 예외.
+
+    Returns:
+        500 에러 JSON 응답.
     """
     tracking_id = str(uuid.uuid4())
     timestamp = get_request_timestamp(request)

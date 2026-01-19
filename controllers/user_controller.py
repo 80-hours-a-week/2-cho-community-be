@@ -1,4 +1,7 @@
-# user_controller: 사용자 관련 컨트롤러 모듈
+"""user_controller: 사용자 관련 컨트롤러 모듈.
+
+사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 등의 기능을 제공합니다.
+"""
 
 from fastapi import HTTPException, Request, status
 from models import user_models
@@ -12,8 +15,21 @@ from schemas.user_schemas import (
 from dependencies.request_context import get_request_timestamp
 
 
-# 사용자 ID를 사용하여 사용자 조회
 async def get_user(user_id: int, request: Request) -> dict:
+    """사용자 ID를 사용하여 사용자를 조회합니다.
+
+    인증되지 않은 요청에서 사용됩니다.
+
+    Args:
+        user_id: 조회할 사용자 ID.
+        request: FastAPI Request 객체.
+
+    Returns:
+        사용자 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 잘못된 ID면 400, 사용자가 없으면 404.
+    """
     timestamp = get_request_timestamp(request)
 
     if not user_id or user_id < 1:
@@ -52,8 +68,19 @@ async def get_user(user_id: int, request: Request) -> dict:
     }
 
 
-# 새로운 사용자 생성
 async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
+    """새로운 사용자를 생성합니다.
+
+    Args:
+        user_data: 사용자 등록 정보.
+        request: FastAPI Request 객체.
+
+    Returns:
+        사용자 생성 성공 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 이메일/닉네임 중복 시 409 Conflict.
+    """
     timestamp = get_request_timestamp(request)
 
     # 이메일 중복 확인
@@ -96,8 +123,16 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
     }
 
 
-# 현재 로그인 중인 사용자의 정보를 반환
 async def get_my_info(current_user: User, request: Request) -> dict:
+    """현재 로그인 중인 사용자의 정보를 반환합니다.
+
+    Args:
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        사용자 정보가 포함된 응답 딕셔너리.
+    """
     timestamp = get_request_timestamp(request)
 
     return {
@@ -116,8 +151,22 @@ async def get_my_info(current_user: User, request: Request) -> dict:
     }
 
 
-# 사용자 ID를 사용하여 사용자 정보 조회
 async def get_user_info(user_id: int, current_user: User, request: Request) -> dict:
+    """사용자 ID를 사용하여 다른 사용자 정보를 조회합니다.
+
+    인증된 사용자가 다른 사용자를 조회할 때 사용됩니다.
+
+    Args:
+        user_id: 조회할 사용자 ID.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        사용자 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 사용자가 없으면 404 Not Found.
+    """
     timestamp = get_request_timestamp(request)
     user = user_models.get_user_by_id(user_id)
 
@@ -146,10 +195,22 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
     }
 
 
-# 현재 로그인 중인 사용자의 정보를 수정
 async def update_user(
     update_data: UpdateUserRequest, current_user: User, request: Request
 ) -> dict:
+    """현재 로그인 중인 사용자의 정보를 수정합니다.
+
+    Args:
+        update_data: 수정할 정보 (닉네임, 이메일).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        수정된 사용자 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 변경 사항 없으면 400, 중복이면 409.
+    """
     timestamp = get_request_timestamp(request)
 
     updates = {}
@@ -217,10 +278,22 @@ async def update_user(
     }
 
 
-# 현재 로그인 중인 사용자의 비밀번호 변경
 async def change_password(
     password_data: ChangePasswordRequest, current_user: User, request: Request
 ) -> dict:
+    """현재 로그인 중인 사용자의 비밀번호를 변경합니다.
+
+    Args:
+        password_data: 비밀번호 변경 정보 (현재, 새 비밀번호).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        비밀번호 변경 성공 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 현재 비밀번호 불일치 시 401, 검증 실패 시 400.
+    """
     timestamp = get_request_timestamp(request)
 
     # 현재 비밀번호 확인
@@ -265,10 +338,22 @@ async def change_password(
     }
 
 
-# 회원 탈퇴
 async def withdraw_user(
     withdraw_data: WithdrawRequest, current_user: User, request: Request
 ) -> dict:
+    """회원 탈퇴를 처리합니다.
+
+    Args:
+        withdraw_data: 탈퇴 요청 정보 (비밀번호, 동의 여부).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        탈퇴 신청 접수 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 비활성 사용자면 400, 비밀번호 불일치 시 400.
+    """
     timestamp = get_request_timestamp(request)
 
     # 현재 로그인 중인 사용자가 활성화 상태인지 확인

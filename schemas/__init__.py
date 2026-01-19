@@ -1,4 +1,7 @@
-# schemas: Pydantic 모델들이 정의된 패키지
+"""schemas: Pydantic 모델 패키지.
+
+요청/응답 데이터 검증을 위한 Pydantic 스키마를 제공합니다.
+"""
 
 from .post_schemas import (
     CreatePostRequest,

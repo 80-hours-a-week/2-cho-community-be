@@ -1,21 +1,43 @@
-# user_schemas: 사용자 관련 Pydantic 모델
+"""user_schemas: 사용자 관련 Pydantic 모델 모듈.
+
+사용자 등록, 수정, 비밀번호 변경, 탈퇴 요청 스키마를 정의합니다.
+"""
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 import re
 
 
-# 사용자 등록 요청
 class CreateUserRequest(BaseModel):
+    """사용자 등록 요청 모델.
+
+    Attributes:
+        name: 사용자 이름.
+        email: 이메일 주소.
+        password: 비밀번호 (8~20자, 대/소문자/숫자/특수문자 포함).
+        nickname: 닉네임 (3~20자, 영문/숫자/언더바).
+        profileImageUrl: 프로필 이미지 URL.
+    """
+
     name: str
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=20)
     nickname: str = Field(..., min_length=3, max_length=20)
     profileImageUrl: str | None = "/assets/default_profile.png"
 
-    # 비밀번호는 대문자, 소문자, 숫자, 특수문자를 포함하여 8자 이상 20자 이하
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
+        """비밀번호 형식을 검증합니다.
+
+        Args:
+            v: 입력된 비밀번호.
+
+        Returns:
+            검증된 비밀번호.
+
+        Raises:
+            ValueError: 비밀번호 형식이 올바르지 않은 경우.
+        """
         pattern = (
             r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$"
         )
@@ -25,20 +47,40 @@ class CreateUserRequest(BaseModel):
             )
         return v
 
-    # 닉네임은 3자 이상 20자 이하의 영문, 숫자, 언더바로 구성
     @field_validator("nickname")
     @classmethod
     def validate_nickname(cls, v: str) -> str:
+        """닉네임 형식을 검증합니다.
+
+        Args:
+            v: 입력된 닉네임.
+
+        Returns:
+            검증된 닉네임.
+
+        Raises:
+            ValueError: 닉네임 형식이 올바르지 않은 경우.
+        """
         if not re.match(r"^[a-zA-Z0-9_]{3,20}$", v):
             raise ValueError(
                 "닉네임은 3자 이상 20자 이하의 영문, 숫자, 언더바로 구성하여야 합니다."
             )
         return v
 
-    # 프로필 이미지는 .jpg, .jpeg, .png로 구성
     @field_validator("profileImageUrl")
     @classmethod
     def validate_profile_image(cls, v: str | None) -> str:
+        """프로필 이미지 URL 형식을 검증합니다.
+
+        Args:
+            v: 입력된 프로필 이미지 URL.
+
+        Returns:
+            검증된 프로필 이미지 URL.
+
+        Raises:
+            ValueError: 이미지 형식이 올바르지 않은 경우.
+        """
         if v is None:
             return "/assets/default_profile.png"
         allowed_extensions = {".jpg", ".jpeg", ".png"}
@@ -47,15 +89,31 @@ class CreateUserRequest(BaseModel):
         return v
 
 
-# 사용자 정보 수정 요청
 class UpdateUserRequest(BaseModel):
+    """사용자 정보 수정 요청 모델.
+
+    Attributes:
+        nickname: 새 닉네임 (선택).
+        email: 새 이메일 주소 (선택).
+    """
+
     nickname: str | None = Field(None, min_length=3, max_length=20)
     email: EmailStr | None = None
 
-    # 닉네임은 3자 이상 20자 이하의 영문, 숫자, 언더바로 구성
     @field_validator("nickname")
     @classmethod
     def validate_nickname(cls, v: str | None) -> str | None:
+        """닉네임 형식을 검증합니다.
+
+        Args:
+            v: 입력된 닉네임.
+
+        Returns:
+            검증된 닉네임 또는 None.
+
+        Raises:
+            ValueError: 닉네임 형식이 올바르지 않은 경우.
+        """
         if v is None:
             return None
         if not re.match(r"^[a-zA-Z0-9_]{3,20}$", v):
@@ -65,16 +123,33 @@ class UpdateUserRequest(BaseModel):
         return v
 
 
-# 비밀번호 변경 요청
 class ChangePasswordRequest(BaseModel):
+    """비밀번호 변경 요청 모델.
+
+    Attributes:
+        current_password: 현재 비밀번호.
+        new_password: 새 비밀번호.
+        new_password_confirm: 새 비밀번호 확인.
+    """
+
     current_password: str
     new_password: str = Field(..., min_length=8, max_length=20)
     new_password_confirm: str
 
-    # 비밀번호는 대문자, 소문자, 숫자, 특수문자를 포함하여 8자 이상 20자 이하
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
+        """새 비밀번호 형식을 검증합니다.
+
+        Args:
+            v: 입력된 새 비밀번호.
+
+        Returns:
+            검증된 새 비밀번호.
+
+        Raises:
+            ValueError: 비밀번호 형식이 올바르지 않은 경우.
+        """
         pattern = (
             r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$"
         )
@@ -85,15 +160,31 @@ class ChangePasswordRequest(BaseModel):
         return v
 
 
-# 사용자 탈퇴 요청
 class WithdrawRequest(BaseModel):
+    """사용자 탈퇴 요청 모델.
+
+    Attributes:
+        password: 현재 비밀번호.
+        agree: 탈퇴 동의 여부.
+    """
+
     password: str
     agree: bool
 
-    # 사용자가 계정을 삭제하기 전에 반드시 동의해야 함
     @field_validator("agree")
     @classmethod
     def must_agree(cls, v: bool) -> bool:
+        """탈퇴 동의 여부를 검증합니다.
+
+        Args:
+            v: 동의 여부.
+
+        Returns:
+            검증된 동의 여부.
+
+        Raises:
+            ValueError: 동의하지 않은 경우.
+        """
         if not v:
             raise ValueError("계정을 삭제하기 전에 반드시 동의하여야 합니다.")
         return v

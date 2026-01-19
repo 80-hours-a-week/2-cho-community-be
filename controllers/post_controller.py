@@ -1,10 +1,14 @@
-# post_controller: 게시글, 댓글, 좋아요 관련 컨트롤러 모듈
+"""post_controller: 게시글, 댓글, 좋아요 관련 컨트롤러 모듈.
+
+게시글 CRUD, 이미지 업로드, 좋아요, 댓글 기능을 제공합니다.
+"""
 
 import os
 import uuid
 from fastapi import HTTPException, Request, UploadFile, status
 from models import post_models
 from models import user_models
+from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from schemas.comment_schemas import CreateCommentRequest, UpdateCommentRequest
 from dependencies.request_context import get_request_timestamp
@@ -21,15 +25,28 @@ IMAGE_UPLOAD_DIR = "assets/posts"
 # ============ 게시글 관련 핸들러 ============
 
 
-# 게시글 목록 조회
 async def get_posts(
     page: int,
     limit: int,
     request: Request,
 ) -> dict:
+    """게시글 목록을 조회합니다.
+
+    페이지네이션을 적용하여 게시글 목록을 반환합니다.
+
+    Args:
+        page: 페이지 번호 (0부터 시작).
+        limit: 페이지당 게시글 수 (1~100).
+        request: FastAPI Request 객체.
+
+    Returns:
+        게시글 목록과 페이지네이션 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 잘못된 page/limit 값이면 400.
+    """
     timestamp = get_request_timestamp(request)
 
-    # page와 limit 유효성 검사
     if page < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -94,8 +111,21 @@ async def get_posts(
     }
 
 
-# 게시글 상세 조회
 async def get_post(post_id: int, request: Request) -> dict:
+    """게시글 상세 정보를 조회합니다.
+
+    게시글 내용과 댓글 목록을 함께 반환합니다.
+
+    Args:
+        post_id: 조회할 게시글 ID.
+        request: FastAPI Request 객체.
+
+    Returns:
+        게시글 상세 정보와 댓글 목록이 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 잘못된 ID면 400, 게시글이 없으면 404.
+    """
     timestamp = get_request_timestamp(request)
 
     if post_id < 1:
@@ -167,12 +197,21 @@ async def get_post(post_id: int, request: Request) -> dict:
     }
 
 
-# 게시글 생성
 async def create_post(
     post_data: CreatePostRequest,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """새 게시글을 생성합니다.
+
+    Args:
+        post_data: 게시글 생성 정보 (제목, 내용, 이미지 URL).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        생성된 게시글 ID가 포함된 응답 딕셔너리.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.create_post(
@@ -193,13 +232,26 @@ async def create_post(
     }
 
 
-# 게시글 수정
 async def update_post(
     post_id: int,
     post_data: UpdatePostRequest,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """게시글을 수정합니다.
+
+    Args:
+        post_id: 수정할 게시글 ID.
+        post_data: 수정할 정보 (제목, 내용).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        수정된 게시글 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글 없으면 404, 권한 없으면 403, 변경 없으면 400.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.get_post_by_id(post_id)
@@ -254,12 +306,24 @@ async def update_post(
     }
 
 
-# 게시글 삭제
 async def delete_post(
     post_id: int,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """게시글을 삭제합니다.
+
+    Args:
+        post_id: 삭제할 게시글 ID.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        삭제 성공 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글 없으면 404, 권한 없으면 403.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.get_post_by_id(post_id)
@@ -294,12 +358,24 @@ async def delete_post(
     }
 
 
-# 이미지 업로드
 async def upload_image(
     file: UploadFile,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """이미지를 업로드합니다.
+
+    Args:
+        file: 업로드할 이미지 파일.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        업로드된 이미지 URL이 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 잘못된 파일 형식이면 400, 파일 크기 초과면 400.
+    """
     timestamp = get_request_timestamp(request)
 
     # 파일 확장자 검증
@@ -315,7 +391,7 @@ async def upload_image(
             },
         )
 
-    # 파일 크기 검증 (스트리밍으로 읽으면서 확인)
+    # 파일 크기 검증
     contents = await file.read()
     if len(contents) > MAX_IMAGE_SIZE:
         raise HTTPException(
@@ -352,12 +428,24 @@ async def upload_image(
 # ============ 좋아요 관련 핸들러 ============
 
 
-# 게시글에 좋아요 추가
 async def like_post(
     post_id: int,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """게시글에 좋아요를 추가합니다.
+
+    Args:
+        post_id: 좋아요할 게시글 ID.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        좋아요 개수가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글 없으면 404, 이미 좋아요했으면 409.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.get_post_by_id(post_id)
@@ -395,12 +483,24 @@ async def like_post(
     }
 
 
-# 좋아요 취소하기
 async def unlike_post(
     post_id: int,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """좋아요를 취소합니다.
+
+    Args:
+        post_id: 좋아요 취소할 게시글 ID.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        좋아요 개수가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글 없으면 404, 좋아요 안했으면 404.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.get_post_by_id(post_id)
@@ -441,13 +541,26 @@ async def unlike_post(
 # ============ 댓글 관련 핸들러 ============
 
 
-# 댓글 작성하기
 async def create_comment(
     post_id: int,
     comment_data: CreateCommentRequest,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """새 댓글을 작성합니다.
+
+    Args:
+        post_id: 댓글을 작성할 게시글 ID.
+        comment_data: 댓글 생성 정보 (내용).
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        생성된 댓글 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글 없으면 404.
+    """
     timestamp = get_request_timestamp(request)
 
     post = post_models.get_post_by_id(post_id)
@@ -479,14 +592,28 @@ async def create_comment(
     }
 
 
-# 댓글 수정하기
 async def update_comment(
     post_id: int,
     comment_id: int,
     comment_data: UpdateCommentRequest,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """댓글을 수정합니다.
+
+    Args:
+        post_id: 게시글 ID.
+        comment_id: 수정할 댓글 ID.
+        comment_data: 수정할 내용.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        수정된 댓글 정보가 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글/댓글 없으면 404, 권한 없으면 403, 불일치면 400.
+    """
     timestamp = get_request_timestamp(request)
 
     # 게시글이 있는지 확인
@@ -547,13 +674,26 @@ async def update_comment(
     }
 
 
-# 댓글 삭제하기
 async def delete_comment(
     post_id: int,
     comment_id: int,
-    current_user,
+    current_user: User,
     request: Request,
 ) -> dict:
+    """댓글을 삭제합니다.
+
+    Args:
+        post_id: 게시글 ID.
+        comment_id: 삭제할 댓글 ID.
+        current_user: 현재 인증된 사용자 객체.
+        request: FastAPI Request 객체.
+
+    Returns:
+        삭제 성공 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 게시글/댓글 없으면 404, 권한 없으면 403, 불일치면 400.
+    """
     timestamp = get_request_timestamp(request)
 
     # 게시글이 있는지 확인
