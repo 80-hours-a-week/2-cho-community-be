@@ -167,13 +167,13 @@ def remove_like(post_id: int, user_id: int) -> bool:
 # ============ 댓글 관련 함수 ============
 
 
-# 특정 게시글의 댓글 목록 조회 (최신순 정렬)
+# 특정 게시글의 댓글 목록 조회하기 (최신순 정렬)
 def get_comments_by_post(post_id: int) -> List[Comment]:
     comments = [c for c in _comments if c.post_id == post_id and not c.is_deleted]
     return sorted(comments, key=lambda c: c.created_at, reverse=True)
 
 
-# ID로 댓글 조회
+# ID로 댓글 조회하기
 def get_comment_by_id(comment_id: int) -> Comment | None:
     return next((c for c in _comments if c.id == comment_id and not c.is_deleted), None)
 
