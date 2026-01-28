@@ -282,9 +282,6 @@ async def update_post(
                 tuple(params),
             )
 
-            if cur.rowcount == 0:
-                return None
-
             return await get_post_by_id(post_id)
 
 

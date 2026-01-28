@@ -20,7 +20,7 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=20)
     nickname: str = Field(..., min_length=3, max_length=10)
-    profileImageUrl: str | None = "/assets/default_profile.png"
+    profileImageUrl: str | None = "/assets/profiles/default_profile.jpg"
 
     @field_validator("password")
     @classmethod
@@ -82,7 +82,7 @@ class CreateUserRequest(BaseModel):
             ValueError: 이미지 형식이 올바르지 않은 경우.
         """
         if v is None:
-            return "/assets/default_profile.png"
+            return "/assets/profiles/default_profile.jpg"
         allowed_extensions = {".jpg", ".jpeg", ".png"}
         if not any(v.endswith(ext) for ext in allowed_extensions):
             raise ValueError("프로필 이미지는 .jpg, .jpeg, .png로 구성하여야 합니다.")

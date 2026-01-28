@@ -46,7 +46,7 @@ async def close_db() -> None:
         _pool.close()
         await _pool.wait_closed()
         _pool = None
-        print("🔌 MySQL 연결 풀 종료")
+        print("MySQL 연결 풀 종료")
 
 
 def get_pool() -> aiomysql.Pool:

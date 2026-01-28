@@ -15,6 +15,8 @@ from middleware import TimingMiddleware, LoggingMiddleware
 from middleware.exception_handler import global_exception_handler
 from core.config import settings
 from database.connection import init_db, close_db
+from fastapi.staticfiles import StaticFiles
+import os
 
 
 @asynccontextmanager
@@ -54,7 +56,6 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     max_age=24 * 60 * 60,
-    same_site="lax",
     https_only=False,
 )
 
@@ -72,6 +73,12 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(post_router)
 app.include_router(terms_router)
+
+# 정적 파일 서빙 설정
+# assets 디렉토리가 없으면 생성 (안전장치)
+os.makedirs("assets", exist_ok=True)
+
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 # 전역 예외 핸들러 등록
 app.add_exception_handler(Exception, global_exception_handler)

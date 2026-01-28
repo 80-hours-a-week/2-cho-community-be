@@ -3,7 +3,9 @@
 사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 등의 기능을 제공합니다.
 """
 
-from fastapi import HTTPException, Request, status
+import os
+import uuid
+from fastapi import HTTPException, Request, status, UploadFile
 from models import user_models
 from models.user_models import User
 from schemas.user_schemas import (
@@ -13,6 +15,13 @@ from schemas.user_schemas import (
     WithdrawRequest,
 )
 from dependencies.request_context import get_request_timestamp
+
+# 허용된 이미지 확장자
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+# 최대 이미지 크기 (5MB)
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+# 프로필 이미지 저장 경로
+PROFILE_IMAGE_UPLOAD_DIR = "assets/profiles"
 
 
 async def get_user(user_id: int, request: Request) -> dict:
@@ -362,6 +371,73 @@ async def withdraw_user(
         "code": "WITHDRAWAL_ACCEPTED",
         "message": "탈퇴 신청이 접수되었습니다.",
         "data": {},
+        "errors": [],
+        "timestamp": timestamp,
+    }
+
+
+async def upload_profile_image(
+    file: UploadFile,
+    current_user: User,
+    request: Request,
+) -> dict:
+    """프로필 이미지를 업로드합니다.
+
+    Args:
+        file: 업로드할 이미지 파일.
+        current_user: 현재 인증된 사용자.
+        request: FastAPI Request 객체.
+
+    Returns:
+        업로드된 이미지 URL이 포함된 응답 딕셔너리.
+
+    Raises:
+        HTTPException: 잘못된 파일 형식이면 400, 파일 크기 초과면 400.
+    """
+    timestamp = get_request_timestamp(request)
+
+    # 파일 확장자 검증
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_file_type",
+                "message": f"허용된 이미지 형식: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+                "timestamp": timestamp,
+            },
+        )
+
+    # 파일 크기 검증
+    contents = await file.read()
+    if len(contents) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "file_too_large",
+                "message": f"파일 크기는 {MAX_IMAGE_SIZE // (1024 * 1024)}MB를 초과할 수 없습니다.",
+                "timestamp": timestamp,
+            },
+        )
+
+    # 유니크한 파일명 생성
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(PROFILE_IMAGE_UPLOAD_DIR, unique_filename)
+
+    # 디렉토리가 없으면 생성
+    os.makedirs(PROFILE_IMAGE_UPLOAD_DIR, exist_ok=True)
+
+    # 파일 저장
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    return {
+        "code": "IMAGE_UPLOADED",
+        "message": "프로필 이미지가 업로드되었습니다.",
+        "data": {
+            "url": f"/{file_path}",
+        },
         "errors": [],
         "timestamp": timestamp,
     }

@@ -41,7 +41,8 @@ class User:
     @property
     def profileImageUrl(self) -> str:
         """프로필 이미지 URL을 반환합니다 (하위 호환성)."""
-        return self.profile_image_url or "/assets/default_profile.png"
+        # 실제 파일이 assets/profiles/default_profile.jpg 에 위치함
+        return self.profile_image_url or "/assets/profiles/default_profile.jpg"
 
 
 def _row_to_user(row: tuple) -> User:
