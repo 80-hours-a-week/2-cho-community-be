@@ -3,6 +3,7 @@
 애플리케이션 설정, 미들웨어 구성, 라우터 등록, 전역 예외 핸들러를 설정합니다.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -13,6 +14,21 @@ from routers.terms_router import terms_router
 from middleware import TimingMiddleware, LoggingMiddleware
 from middleware.exception_handler import global_exception_handler
 from core.config import settings
+from database.connection import init_db, close_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """애플리케이션 생명주기 관리.
+
+    시작 시 데이터베이스 연결 풀을 초기화하고,
+    종료 시 연결 풀을 정리합니다.
+    """
+    # 시작: 데이터베이스 연결 풀 초기화
+    await init_db()
+    yield
+    # 종료: 데이터베이스 연결 풀 해제
+    await close_db()
 
 
 # FastAPI 인스턴스 생성
@@ -20,6 +36,7 @@ app = FastAPI(
     title="2cho Community API",
     description="커뮤니티 백엔드 API 서버",
     version="1.0.0",
+    lifespan=lifespan,
 )
 """FastAPI 애플리케이션 인스턴스."""
 
