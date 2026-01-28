@@ -41,7 +41,7 @@ async def get_user(user_id: int, request: Request) -> dict:
             },
         )
 
-    user = user_models.get_user_by_id(user_id)
+    user = await user_models.get_user_by_id(user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -58,7 +58,6 @@ async def get_user(user_id: int, request: Request) -> dict:
             "user": {
                 "user_id": user.id,
                 "email": user.email,
-                "name": user.name,
                 "nickname": user.nickname,
                 "profileImageUrl": user.profileImageUrl,
             }
@@ -84,7 +83,7 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
     timestamp = get_request_timestamp(request)
 
     # 이메일 중복 확인
-    if user_models.get_user_by_email(user_data.email):
+    if await user_models.get_user_by_email(user_data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -94,7 +93,7 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
         )
 
     # 닉네임 중복 확인
-    if user_models.get_user_by_nickname(user_data.nickname):
+    if await user_models.get_user_by_nickname(user_data.nickname):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -104,15 +103,12 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
         )
 
     # 새로운 사용자 생성
-    new_user = user_models.User(
-        id=len(user_models.get_users()) + 1,
-        name=user_data.name,
+    await user_models.add_user(
         email=user_data.email,
         password=user_data.password,
         nickname=user_data.nickname,
-        profileImageUrl=user_data.profileImageUrl or "/assets/default_profile.png",
+        profile_image_url=user_data.profileImageUrl,
     )
-    user_models.add_user(new_user)
 
     return {
         "code": "SIGNUP_SUCCESS",
@@ -168,7 +164,7 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
         HTTPException: 사용자가 없으면 404 Not Found.
     """
     timestamp = get_request_timestamp(request)
-    user = user_models.get_user_by_id(user_id)
+    user = await user_models.get_user_by_id(user_id)
 
     if not user:
         raise HTTPException(
@@ -201,7 +197,7 @@ async def update_user(
     """현재 로그인 중인 사용자의 정보를 수정합니다.
 
     Args:
-        update_data: 수정할 정보 (닉네임, 이메일).
+        update_data: 수정할 정보 (닉네임, 프로필 이미지).
         current_user: 현재 인증된 사용자 객체.
         request: FastAPI Request 객체.
 
@@ -213,14 +209,8 @@ async def update_user(
     """
     timestamp = get_request_timestamp(request)
 
-    updates = {}
-    if update_data.nickname is not None:
-        updates["nickname"] = update_data.nickname
-    if update_data.email is not None:
-        updates["email"] = update_data.email
-
     # 변경 사항이 없는 경우
-    if not updates:
+    if update_data.nickname is None and update_data.profileImageUrl is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -230,8 +220,8 @@ async def update_user(
         )
 
     # 닉네임 중복 확인
-    if "nickname" in updates:
-        existing_user = user_models.get_user_by_nickname(updates["nickname"])
+    if update_data.nickname is not None:
+        existing_user = await user_models.get_user_by_nickname(update_data.nickname)
         if existing_user and existing_user.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -241,26 +231,16 @@ async def update_user(
                 },
             )
 
-    # 이메일 중복 확인
-    if "email" in updates:
-        existing_user = user_models.get_user_by_email(updates["email"])
-        if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "error": "email_already_exists",
-                    "timestamp": timestamp,
-                },
-            )
-
     # 사용자 정보 수정
-    updated_user = user_models.update_user(current_user.id, **updates)
+    updated_user = await user_models.update_user(
+        current_user.id,
+        nickname=update_data.nickname,
+        profile_image_url=update_data.profileImageUrl,
+    )
 
     # 세션 정보 수정
-    if "nickname" in updates:
-        request.session["nickname"] = updates["nickname"]
-    if "email" in updates:
-        request.session["email"] = updates["email"]
+    if update_data.nickname is not None:
+        request.session["nickname"] = update_data.nickname
 
     return {
         "code": "UPDATE_SUCCESS",
@@ -327,7 +307,7 @@ async def change_password(
         )
 
     # 비밀번호 변경
-    user_models.update_password(current_user.id, password_data.new_password)
+    await user_models.update_password(current_user.id, password_data.new_password)
 
     return {
         "code": "PASSWORD_CHANGE_SUCCESS",
