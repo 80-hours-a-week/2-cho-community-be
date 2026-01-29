@@ -104,7 +104,7 @@ class UpdateUserRequest(BaseModel):
     @classmethod
     def validate_nickname(cls, v: str | None) -> str | None:
         """닉네임 형식을 검증합니다.
-        닉네임은 3자 이상 20자 이하의 영문, 숫자, 언더바로 구성하여야 합니다.
+        닉네임은 3자 이상 10자 이하의 영문, 숫자, 언더바로 구성하여야 합니다.
 
         Args:
             v: 입력된 닉네임.

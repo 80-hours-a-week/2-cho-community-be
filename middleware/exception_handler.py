@@ -5,6 +5,8 @@
 
 import uuid
 import logging
+import traceback
+from logging.handlers import RotatingFileHandler
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +15,23 @@ from dependencies.request_context import get_request_timestamp
 
 
 logger = logging.getLogger("api")
+
+# 에러 전용 파일 로거 설정
+error_logger = logging.getLogger("api.error")
+error_logger.setLevel(logging.ERROR)
+
+# RotatingFileHandler: 10MB 단위로 로테이션, 최대 5개 백업 파일
+if not error_logger.handlers:
+    error_file_handler = RotatingFileHandler(
+        "server_error.log",
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
+        encoding="utf-8",
+    )
+    error_file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
+    error_logger.addHandler(error_file_handler)
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -33,12 +52,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     # 로깅
     logger.error(f"[{tracking_id}] Unhandled exception: {exc}")
 
-    # 디버깅용 파일 로깅 추가
-    with open("server_error.log", "a") as log_file:
-        import traceback
-
-        log_file.write(f"[{timestamp}] [{tracking_id}] Unhandled exception: {exc}\n")
-        log_file.write(traceback.format_exc() + "\n")
+    # 파일 로깅 (RotatingFileHandler 사용)
+    error_logger.error(
+        f"[{tracking_id}] Unhandled exception: {exc}\n{traceback.format_exc()}"
+    )
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

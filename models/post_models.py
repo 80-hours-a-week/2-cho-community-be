@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from database.connection import get_connection
+from models.comment_models import get_comments_with_author
 
 
 @dataclass
@@ -423,44 +424,6 @@ async def get_post_with_details(post_id: int) -> dict | None:
             }
 
 
-async def get_comments_with_author(post_id: int) -> list[dict]:
-    """게시글의 댓글 목록을 작성자 정보와 함께 조회합니다.
-
-    Args:
-        post_id: 게시글 ID.
-
-    Returns:
-        댓글 상세 정보 딕셔너리 목록.
-    """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                SELECT c.id, c.content, c.created_at, c.updated_at,
-                       u.id, u.nickname, u.profile_img
-                FROM comment c
-                LEFT JOIN user u ON c.author_id = u.id
-                WHERE c.post_id = %s AND c.deleted_at IS NULL
-                ORDER BY c.created_at ASC
-                """,
-                (post_id,),
-            )
-            rows = await cur.fetchall()
-
-            results = []
-            for row in rows:
-                results.append(
-                    {
-                        "comment_id": row[0],
-                        "content": row[1],
-                        "created_at": row[2],
-                        "updated_at": row[3],
-                        "author": {
-                            "user_id": row[4],
-                            "nickname": row[5] if row[5] else "탈퇴한 사용자",
-                            "profileImageUrl": row[6]
-                            or "/assets/profiles/default_profile.jpg",
-                        },
-                    }
-                )
-            return results
+# get_comments_with_author는 comment_models.py에서 정의됨 (상단 import 참조)
+# 하위 호환성을 위해 재내보내기
+__all__ = ["Post", "get_comments_with_author"]

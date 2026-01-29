@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from database.connection import get_connection
+from pymysql.err import IntegrityError
 
 
 @dataclass
@@ -110,8 +111,8 @@ async def add_like(post_id: int, user_id: int) -> Like | None:
                 )
                 row = await cur.fetchone()
                 return _row_to_like(row) if row else None
-            except Exception:
-                # 중복 좋아요
+            except IntegrityError:
+                # 중복 좋아요 (Unique constraint violation)
                 return None
 
 
