@@ -60,7 +60,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     max_age=24 * 60 * 60,
-    https_only=False,
+    https_only=True,
+    same_site="lax",
 )
 
 # CORSMiddleware: CORS 정책을 설정
@@ -68,8 +69,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
 )
 
 # 라우터 추가
