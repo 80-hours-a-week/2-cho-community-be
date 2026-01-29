@@ -33,6 +33,13 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     # 로깅
     logger.error(f"[{tracking_id}] Unhandled exception: {exc}")
 
+    # 디버깅용 파일 로깅 추가
+    with open("server_error.log", "a") as log_file:
+        import traceback
+
+        log_file.write(f"[{timestamp}] [{tracking_id}] Unhandled exception: {exc}\n")
+        log_file.write(traceback.format_exc() + "\n")
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

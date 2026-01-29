@@ -26,24 +26,24 @@ CREATE TABLE post (
     title varchar(255) NOT NULL,
     content TEXT NOT NULL,
     image_url varchar(2048) NULL,
-    author_id INT UNSIGNED NOT NULL,
+    author_id INT UNSIGNED NULL,
     views INT UNSIGNED DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL,
-    FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE CASCADE
+    FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE SET NULL
 );
 
 -- 댓글 테이블
 CREATE TABLE comment (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     content TEXT NOT NULL,
-    author_id INT UNSIGNED NOT NULL,
+    author_id INT UNSIGNED NULL,
     post_id INT UNSIGNED NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL,
-    FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE SET NULL,
     FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE
 );
 

@@ -14,5 +14,9 @@ build/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+.vscode/
+.agent/
 pytest.ini
 tests/
+assets/
+scripts/

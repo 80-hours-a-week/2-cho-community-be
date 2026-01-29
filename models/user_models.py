@@ -135,6 +135,30 @@ async def get_user_by_email(email: str) -> User | None:
             return _row_to_user(row) if row else None
 
 
+async def get_deleted_user_by_email(email: str) -> User | None:
+    """이메일로 탈퇴한 사용자를 조회합니다.
+
+    Args:
+        email: 조회할 이메일 주소.
+
+    Returns:
+        사용자 객체, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, email, nickname, password, profile_img,
+                       created_at, updated_at, deleted_at
+                FROM user
+                WHERE email = %s AND deleted_at IS NOT NULL
+                """,
+                (email,),
+            )
+            row = await cur.fetchone()
+            return _row_to_user(row) if row else None
+
+
 async def get_user_by_nickname(nickname: str) -> User | None:
     """닉네임으로 사용자를 조회합니다.
 
@@ -152,6 +176,30 @@ async def get_user_by_nickname(nickname: str) -> User | None:
                        created_at, updated_at, deleted_at
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NULL
+                """,
+                (nickname,),
+            )
+            row = await cur.fetchone()
+            return _row_to_user(row) if row else None
+
+
+async def get_deleted_user_by_nickname(nickname: str) -> User | None:
+    """닉네임으로 탈퇴한 사용자를 조회합니다.
+
+    Args:
+        nickname: 조회할 닉네임.
+
+    Returns:
+        사용자 객체, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, email, nickname, password, profile_img,
+                       created_at, updated_at, deleted_at
+                FROM user
+                WHERE nickname = %s AND deleted_at IS NOT NULL
                 """,
                 (nickname,),
             )
@@ -279,7 +327,9 @@ async def update_password(user_id: int, new_password: str) -> User | None:
 async def withdraw_user(user_id: int) -> User | None:
     """회원 탈퇴를 처리합니다.
 
-    소프트 삭제를 수행하여 deleted_at을 현재 시간으로 설정합니다.
+    소프트 삭제를 수행하며, 재가입을 위해 이메일과 닉네임을 익명화합니다.
+    email -> deleted_{uuid}_{timestamp}
+    nickname -> deleted_{uuid_prefix}
 
     Args:
         user_id: 탈퇴할 사용자의 ID.
@@ -287,15 +337,53 @@ async def withdraw_user(user_id: int) -> User | None:
     Returns:
         탈퇴 처리된 사용자 객체, 사용자가 없으면 None.
     """
+    import uuid
+    import time
+
+    unique_id = str(uuid.uuid4())
+    timestamp = int(time.time())
+
+    # 닉네임 길이 제한(20자) 등을 고려하여 짧게 생성
+    # 예: deleted_a1b2c3d4
+    anonymized_nickname = f"deleted_{unique_id[:8]}"
+
+    # 이메일은 Unique 유지를 위해 충분히 길게
+    anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
+
     async with get_connection() as conn:
         async with conn.cursor() as cur:
+            # 1. Sever links: Set author_id to NULL for posts and comments
+            await cur.execute(
+                """
+                UPDATE post SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+            await cur.execute(
+                """
+                UPDATE comment SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 2. Kill sessions: Delete all active sessions
+            await cur.execute(
+                """
+                DELETE FROM user_session WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 3. Anonymize user (Soft Delete)
             await cur.execute(
                 """
                 UPDATE user
-                SET deleted_at = NOW()
+                SET deleted_at = NOW(),
+                    email = %s,
+                    nickname = %s
                 WHERE id = %s AND deleted_at IS NULL
                 """,
-                (user_id,),
+                (anonymized_email, anonymized_nickname, user_id),
             )
 
             if cur.rowcount == 0:
@@ -313,3 +401,137 @@ async def withdraw_user(user_id: int) -> User | None:
             )
             row = await cur.fetchone()
             return _row_to_user(row) if row else None
+
+
+async def cleanup_deleted_user(user_id: int) -> User | None:
+    """이미 탈퇴 처리되었으나 정보가 남아있는 사용자(Zombie)를 완전 익명화합니다.
+
+    Args:
+        user_id: 정리할 사용자의 ID.
+
+    Returns:
+        정리된 사용자 객체, 사용자가 없으면 None.
+    """
+    import uuid
+    import time
+
+    unique_id = str(uuid.uuid4())
+    timestamp = int(time.time())
+
+    anonymized_nickname = f"deleted_{unique_id[:8]}"
+    anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
+
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            # 1. Sever links for zombie
+            await cur.execute(
+                """
+                UPDATE post SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+            await cur.execute(
+                """
+                UPDATE comment SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 2. Kill sessions for zombie
+            await cur.execute(
+                """
+                DELETE FROM user_session WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 3. Anonymize user
+            await cur.execute(
+                """
+                UPDATE user
+                SET email = %s,
+                nickname = %s
+                WHERE id = %s
+                """,
+                (anonymized_email, anonymized_nickname, user_id),
+            )
+
+            if cur.rowcount == 0:
+                return None
+
+            await cur.execute(
+                """
+                SELECT id, email, nickname, password, profile_img,
+                       created_at, updated_at, deleted_at
+                FROM user
+                WHERE id = %s
+                """,
+                (user_id,),
+            )
+            row = await cur.fetchone()
+            return _row_to_user(row) if row else None
+
+
+async def create_session(user_id: int, session_id: str, expires_at: datetime) -> None:
+    """사용자 세션을 생성합니다.
+
+    Args:
+        user_id: 사용자 ID.
+        session_id: 세션 ID.
+        expires_at: 만료 시간.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                INSERT INTO user_session (user_id, session_id, expires_at)
+                VALUES (%s, %s, %s)
+                """,
+                (user_id, session_id, expires_at),
+            )
+
+
+async def get_session(session_id: str) -> dict | None:
+    """세션 ID로 세션 정보를 조회합니다.
+
+    Args:
+        session_id: 세션 ID.
+
+    Returns:
+        세션 정보 딕셔너리, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, user_id, session_id, expires_at
+                FROM user_session
+                WHERE session_id = %s
+                """,
+                (session_id,),
+            )
+            row = await cur.fetchone()
+            if row:
+                return {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "session_id": row[2],
+                    "expires_at": row[3],
+                }
+            return None
+
+
+async def delete_session(session_id: str) -> None:
+    """세션을 삭제합니다.
+
+    Args:
+        session_id: 세션 ID.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM user_session WHERE session_id = %s
+                """,
+                (session_id,),
+            )

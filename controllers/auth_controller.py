@@ -74,6 +74,13 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
         request.session["email"] = credentials.email
         request.session["nickname"] = user.nickname
 
+    # DB에 세션 저장 (Immediate Block 지원)
+    from datetime import datetime, timedelta
+
+    # 24시간 후 만료
+    expires_at = datetime.now() + timedelta(hours=24)
+    await user_models.create_session(user.id, session_id, expires_at)
+
     return {
         "code": "LOGIN_SUCCESS",
         "message": "로그인에 성공했습니다.",
@@ -101,6 +108,12 @@ async def logout(current_user: User, request: Request) -> dict:
         로그아웃 성공 응답 딕셔너리.
     """
     timestamp = get_request_timestamp(request)
+
+    # DB 세션 삭제
+    session_id = request.session.get("session_id")
+    if session_id:
+        await user_models.delete_session(session_id)
+
     request.session.clear()
 
     return {

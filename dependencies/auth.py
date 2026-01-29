@@ -35,15 +35,42 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
+    # DB에서 세션 확인 (Strict Validation)
+    db_session = await user_models.get_session(session_id)
+    if not db_session:
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "unauthorized",
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+    # 세션 만료 확인
+    if db_session["expires_at"] < datetime.now():
+        await user_models.delete_session(session_id)
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "session_expired",
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
     email = request.session.get("email")
     user = await user_models.get_user_by_email(email)
 
-    # 사용자 정보를 찾을 수 없음
+    # 사용자 정보를 찾을 수 없음 (탈퇴했거나 DB에서 삭제됨)
     if not user:
+        # 세션 초기화 (유효하지 않은 세션 제거)
+        request.session.clear()
+
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
-                "error": "access_denied",
+                "error": "unauthorized",
                 "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -66,6 +93,15 @@ async def get_optional_user(request: Request) -> User | None:
 
     # 세션이 존재하지 않으면 None 반환
     if not session_id:
+        return None
+
+    # DB 세션 확인
+    db_session = await user_models.get_session(session_id)
+    if not db_session:
+        return None
+
+    # 만료 확인
+    if db_session["expires_at"] < datetime.now():
         return None
 
     email = request.session.get("email")

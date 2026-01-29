@@ -172,12 +172,87 @@ async def create_user(
 
     # 비밀번호 해싱 후 새로운 사용자 생성
     hashed_password = hash_password(user_data.password)
-    await user_models.add_user(
-        email=user_data.email,
-        password=hashed_password,
-        nickname=user_data.nickname,
-        profile_image_url=profile_image_url,
-    )
+
+    from pymysql.err import IntegrityError
+
+    try:
+        await user_models.add_user(
+            email=user_data.email,
+            password=hashed_password,
+            nickname=user_data.nickname,
+            profile_image_url=profile_image_url,
+        )
+    except IntegrityError as e:
+        # Duplicate entry error (1062)
+        if e.args[0] == 1062:
+            # Check if it's due to a deleted user (Zombie)
+            deleted_user = await user_models.get_deleted_user_by_email(user_data.email)
+            if deleted_user:
+                # Clean up the zombie user
+                await user_models.cleanup_deleted_user(deleted_user.id)
+                # Retry creating the user
+                try:
+                    await user_models.add_user(
+                        email=user_data.email,
+                        password=hashed_password,
+                        nickname=user_data.nickname,
+                        profile_image_url=profile_image_url,
+                    )
+                except IntegrityError:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "error": "conflict",
+                            "message": "사용자 생성 중 충돌이 발생했습니다. (재시도 실패)",
+                            "timestamp": timestamp,
+                        },
+                    )
+            else:
+                # Check if it's due to a zombie NICKNAME
+                deleted_user_by_nick = await user_models.get_deleted_user_by_nickname(
+                    user_data.nickname
+                )
+                if deleted_user_by_nick:
+                    # Clean up the zombie user (who holds the nickname)
+                    await user_models.cleanup_deleted_user(deleted_user_by_nick.id)
+                    # Retry
+                    try:
+                        await user_models.add_user(
+                            email=user_data.email,
+                            password=hashed_password,
+                            nickname=user_data.nickname,
+                            profile_image_url=profile_image_url,
+                        )
+                    except IntegrityError:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail={
+                                "error": "conflict",
+                                "message": "사용자 생성 중 충돌이 발생했습니다.",
+                                "timestamp": timestamp,
+                            },
+                        )
+                else:
+                    # Not a zombie, real duplicate
+                    print(f"DEBUG: Duplicate entry but not zombie: {e.args}")
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "error": "conflict",
+                            "message": "이미 존재하는 이메일 또는 닉네임입니다.",
+                            "timestamp": timestamp,
+                        },
+                    )
+        else:
+            import traceback
+
+            print(f"DEBUG: Unhandled IntegrityError: {e} \n{traceback.format_exc()}")
+            raise e
+    except Exception as e:
+        import traceback
+
+        print(f"DEBUG: Unexpected error in create_user: {e} \n{traceback.format_exc()}")
+        raise e
 
     return {
         "code": "SIGNUP_SUCCESS",
@@ -417,6 +492,12 @@ async def withdraw_user(
         )
 
     # 동의 여부는 Pydantic 스키마에서 처리
+
+    # 회원 탈퇴 처리 (Soft Delete)
+    await user_models.withdraw_user(current_user.id)
+
+    # 세션 초기화 (로그아웃)
+    request.session.clear()
 
     return {
         "code": "WITHDRAWAL_ACCEPTED",
