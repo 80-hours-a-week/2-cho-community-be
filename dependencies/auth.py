@@ -35,15 +35,45 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
-    email = request.session.get("email")
-    user = await user_models.get_user_by_email(email)
+    # DB에서 세션과 사용자 정보를 한 번에 조회 (JOIN 사용)
+    result = await user_models.get_user_and_session(session_id)
 
-    # 사용자 정보를 찾을 수 없음
-    if not user:
+    # 세션이나 사용자가 존재하지 않음 (Strict Validation)
+    if not result:
+        request.session.clear()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
-                "error": "access_denied",
+                "error": "unauthorized",
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+    expires_at = result["expires_at"]
+    user = result["user"]
+
+    # 세션 만료 확인
+    if expires_at < datetime.now():
+        await user_models.delete_session(session_id)
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "session_expired",
+                "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+
+    # 탈퇴한 사용자 확인
+    # get_user_and_session은 deleted_at을 필터링하지 않으므로 여기서 명시적으로 확인합니다.
+    # 이는 탈퇴 처리된 사용자가 유효한 세션을 가지고 있더라도 접근을 차단하기 위함입니다.
+
+    if user.deleted_at:
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "unauthorized",
                 "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
@@ -68,5 +98,20 @@ async def get_optional_user(request: Request) -> User | None:
     if not session_id:
         return None
 
-    email = request.session.get("email")
-    return await user_models.get_user_by_email(email)
+    # DB 세션과 사용자 확인
+    result = await user_models.get_user_and_session(session_id)
+    if not result:
+        return None
+
+    expires_at = result["expires_at"]
+    user = result["user"]
+
+    # 만료 확인
+    if expires_at < datetime.now():
+        return None
+
+    # 삭제된 사용자 확인
+    if user.deleted_at:
+        return None
+
+    return user

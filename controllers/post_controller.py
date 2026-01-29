@@ -3,21 +3,16 @@
 게시글 CRUD, 이미지 업로드, 좋아요, 댓글 기능을 제공합니다.
 """
 
-import os
-import uuid
+import datetime
 from fastapi import HTTPException, Request, UploadFile, status
 from models import post_models
-from models import user_models
 from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
-from schemas.comment_schemas import CreateCommentRequest, UpdateCommentRequest
 from dependencies.request_context import get_request_timestamp
 
 
-# 허용된 이미지 확장자
-ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-# 최대 이미지 크기 (5MB)
-MAX_IMAGE_SIZE = 5 * 1024 * 1024
+from utils.file_utils import save_upload_file
+
 # 이미지 저장 경로
 IMAGE_UPLOAD_DIR = "assets/posts"
 
@@ -67,33 +62,22 @@ async def get_posts(
             },
         )
 
-    posts = await post_models.get_posts_by_offset(offset, limit)
+    # 최적화된 쿼리 사용 (N+1 문제 해결)
+    posts_data = await post_models.get_posts_with_details(offset, limit)
     total_count = await post_models.get_total_posts_count()
     has_more = offset + limit < total_count
 
-    # 게시꺀 목록을 응답 형태로 변환
-    posts_data = []
-    for post in posts:
-        author = await user_models.get_user_by_id(post.author_id)
-        posts_data.append(
-            {
-                "post_id": post.id,
-                "title": post.title,
-                "content": post.content[:200] + "..."
-                if len(post.content) > 200
-                else post.content,
-                "image_url": post.image_url,
-                "author": {
-                    "user_id": author.id if author else None,
-                    "nickname": author.nickname if author else "탈퇴한 사용자",
-                    "profileImageUrl": author.profileImageUrl if author else None,
-                },
-                "likes_count": await post_models.get_post_likes_count(post.id),
-                "comments_count": await post_models.get_comments_count_by_post(post.id),
-                "views_count": post.views,
-                "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
-        )
+    # 날짜 포맷팅 (모델이 datetime 객체를 반환하므로 문자열로 변환)
+    for post in posts_data:
+        if isinstance(post["created_at"], datetime.datetime):
+            post["created_at"] = post["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        if post.get("updated_at") and isinstance(post["updated_at"], datetime.datetime):
+            post["updated_at"] = post["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Content truncation
+        content = post["content"]
+        if len(content) > 200:
+            post["content"] = content[:200] + "..."
 
     return {
         "code": "POSTS_RETRIEVED",
@@ -142,8 +126,9 @@ async def get_post(
             },
         )
 
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
+    # 최적화된 쿼리 사용
+    post_data = await post_models.get_post_with_details(post_id)
+    if not post_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -153,59 +138,37 @@ async def get_post(
         )
 
     # 로그인한 사용자인 경우 조회수 증가 (하루 한 번)
+    # 참고: post_data['author']는 딕셔너리 형태이며, 작성자 ID는 post_data['author']['id']에 있습니다.
+
     if current_user:
-        await post_models.increment_view_count(post_id, current_user.id)
-        # 조회수 증가 후 다시 조회하여 최신 값 반영
-        post = await post_models.get_post_by_id(post_id)
+        # 조회수 증가 시도 (이미 오늘 조회했다면 False 반환)
+        # 성공적으로 증가했다면, 로컬 데이터도 업데이트하여 사용자에게 최신 조회수 표시
+        if await post_models.increment_view_count(post_id, current_user.id):
+            post_data["views_count"] += 1
 
-    author = await user_models.get_user_by_id(post.author_id)
-    comments = await post_models.get_comments_by_post(post_id)
+    comments_data = await post_models.get_comments_with_author(post_id)
 
-    # 댓글 목록 변환
-    comments_data = []
-    for comment in comments:
-        comment_author = await user_models.get_user_by_id(comment.author_id)
-        comments_data.append(
-            {
-                "comment_id": comment.id,
-                "content": comment.content,
-                "author": {
-                    "user_id": comment_author.id if comment_author else None,
-                    "nickname": comment_author.nickname
-                    if comment_author
-                    else "탈퇴한 사용자",
-                    "profileImageUrl": comment_author.profileImageUrl
-                    if comment_author
-                    else None,
-                },
-                "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "updated_at": comment.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if comment.updated_at
-                else None,
-            }
-        )
+    # 날짜 포맷팅
+    if isinstance(post_data["created_at"], datetime.datetime):
+        post_data["created_at"] = post_data["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    if post_data.get("updated_at") and isinstance(
+        post_data["updated_at"], datetime.datetime
+    ):
+        post_data["updated_at"] = post_data["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for comment in comments_data:
+        if isinstance(comment["created_at"], datetime.datetime):
+            comment["created_at"] = comment["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        if comment.get("updated_at") and isinstance(
+            comment["updated_at"], datetime.datetime
+        ):
+            comment["updated_at"] = comment["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return {
         "code": "POST_RETRIEVED",
         "message": "게시글 조회에 성공했습니다.",
         "data": {
-            "post": {
-                "post_id": post.id,
-                "title": post.title,
-                "content": post.content,
-                "image_url": post.image_url,
-                "author": {
-                    "user_id": author.id if author else None,
-                    "nickname": author.nickname if author else "탈퇴한 사용자",
-                    "profileImageUrl": author.profileImageUrl if author else None,
-                },
-                "likes_count": await post_models.get_post_likes_count(post_id),
-                "views_count": post.views,
-                "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "updated_at": post.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if post.updated_at
-                else None,
-            },
+            "post": post_data,
             "comments": comments_data,
         },
         "errors": [],
@@ -401,373 +364,19 @@ async def upload_image(
     """
     timestamp = get_request_timestamp(request)
 
-    # 파일 확장자 검증
-    filename = file.filename or ""
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_file_type",
-                "message": f"허용된 이미지 형식: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 파일 크기 검증
-    contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "file_too_large",
-                "message": f"파일 크기는 {MAX_IMAGE_SIZE // (1024 * 1024)}MB를 초과할 수 없습니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 유니크한 파일명 생성
-    unique_filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(IMAGE_UPLOAD_DIR, unique_filename)
-
-    # 디렉토리가 없으면 생성
-    os.makedirs(IMAGE_UPLOAD_DIR, exist_ok=True)
-
-    # 파일 저장
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    try:
+        url = await save_upload_file(file, IMAGE_UPLOAD_DIR)
+    except HTTPException as e:
+        if isinstance(e.detail, dict):
+            e.detail["timestamp"] = timestamp
+        raise e
 
     return {
         "code": "IMAGE_UPLOADED",
         "message": "이미지가 업로드되었습니다.",
         "data": {
-            "url": f"/{file_path}",
+            "url": url,
         },
-        "errors": [],
-        "timestamp": timestamp,
-    }
-
-
-# ============ 좋아요 관련 핸들러 ============
-
-
-async def like_post(
-    post_id: int,
-    current_user: User,
-    request: Request,
-) -> dict:
-    """게시글에 좋아요를 추가합니다.
-
-    Args:
-        post_id: 좋아요할 게시글 ID.
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        좋아요 개수가 포함된 응답 딕셔너리.
-
-    Raises:
-        HTTPException: 게시글 없으면 404, 이미 좋아요했으면 409.
-    """
-    timestamp = get_request_timestamp(request)
-
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 이미 좋아요를 눌렀는지 확인
-    existing_like = await post_models.get_like(post_id, current_user.id)
-    if existing_like:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "already_liked",
-                "message": "이미 좋아요를 누른 게시글입니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    await post_models.add_like(post_id, current_user.id)
-
-    return {
-        "code": "LIKE_ADDED",
-        "message": "좋아요가 추가되었습니다.",
-        "data": {
-            "likes_count": await post_models.get_post_likes_count(post_id),
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
-
-
-async def unlike_post(
-    post_id: int,
-    current_user: User,
-    request: Request,
-) -> dict:
-    """좋아요를 취소합니다.
-
-    Args:
-        post_id: 좋아요 취소할 게시글 ID.
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        좋아요 개수가 포함된 응답 딕셔너리.
-
-    Raises:
-        HTTPException: 게시글 없으면 404, 좋아요 안했으면 404.
-    """
-    timestamp = get_request_timestamp(request)
-
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 좋아요를 눌렀는지 확인
-    existing_like = await post_models.get_like(post_id, current_user.id)
-    if not existing_like:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "like_not_found",
-                "message": "좋아요를 누르지 않은 게시글입니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    await post_models.remove_like(post_id, current_user.id)
-
-    return {
-        "code": "LIKE_REMOVED",
-        "message": "좋아요가 취소되었습니다.",
-        "data": {
-            "likes_count": await post_models.get_post_likes_count(post_id),
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
-
-
-# ============ 댓글 관련 핸들러 ============
-
-
-async def create_comment(
-    post_id: int,
-    comment_data: CreateCommentRequest,
-    current_user: User,
-    request: Request,
-) -> dict:
-    """새 댓글을 작성합니다.
-
-    Args:
-        post_id: 댓글을 작성할 게시글 ID.
-        comment_data: 댓글 생성 정보 (내용).
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        생성된 댓글 정보가 포함된 응답 딕셔너리.
-
-    Raises:
-        HTTPException: 게시글 없으면 404.
-    """
-    timestamp = get_request_timestamp(request)
-
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    comment = await post_models.create_comment(
-        post_id=post_id,
-        author_id=current_user.id,
-        content=comment_data.content,
-    )
-
-    return {
-        "code": "COMMENT_CREATED",
-        "message": "댓글이 생성되었습니다.",
-        "data": {
-            "comment_id": comment.id,
-            "content": comment.content,
-            "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
-
-
-async def update_comment(
-    post_id: int,
-    comment_id: int,
-    comment_data: UpdateCommentRequest,
-    current_user: User,
-    request: Request,
-) -> dict:
-    """댓글을 수정합니다.
-
-    Args:
-        post_id: 게시글 ID.
-        comment_id: 수정할 댓글 ID.
-        comment_data: 수정할 내용.
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        수정된 댓글 정보가 포함된 응답 딕셔너리.
-
-    Raises:
-        HTTPException: 게시글/댓글 없으면 404, 권한 없으면 403, 불일치면 400.
-    """
-    timestamp = get_request_timestamp(request)
-
-    # 게시글이 있는지 확인
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 댓글이 있는지 확인
-    comment = await post_models.get_comment_by_id(comment_id)
-    if not comment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "comment_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 댓글이 해당 게시글에 속하는지 확인
-    if comment.post_id != post_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "comment_not_in_post",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 작성자 확인
-    if comment.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "not_author",
-                "message": "댓글 작성자만 수정할 수 있습니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    updated_comment = await post_models.update_comment(comment_id, comment_data.content)
-
-    return {
-        "code": "COMMENT_UPDATED",
-        "message": "댓글이 수정되었습니다.",
-        "data": {
-            "comment_id": updated_comment.id,
-            "content": updated_comment.content,
-            "updated_at": updated_comment.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
-
-
-async def delete_comment(
-    post_id: int,
-    comment_id: int,
-    current_user: User,
-    request: Request,
-) -> dict:
-    """댓글을 삭제합니다.
-
-    Args:
-        post_id: 게시글 ID.
-        comment_id: 삭제할 댓글 ID.
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        삭제 성공 응답 딕셔너리.
-
-    Raises:
-        HTTPException: 게시글/댓글 없으면 404, 권한 없으면 403, 불일치면 400.
-    """
-    timestamp = get_request_timestamp(request)
-
-    # 게시글이 있는지 확인
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 댓글이 있는지 확인
-    comment = await post_models.get_comment_by_id(comment_id)
-    if not comment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "comment_not_found",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 댓글이 해당 게시글에 속하는지 확인
-    if comment.post_id != post_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "comment_not_in_post",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 작성자 확인
-    if comment.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "not_author",
-                "message": "댓글 작성자만 삭제할 수 있습니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    await post_models.delete_comment(comment_id)
-
-    return {
-        "code": "COMMENT_DELETED",
-        "message": "댓글이 삭제되었습니다.",
-        "data": {},
         "errors": [],
         "timestamp": timestamp,
     }

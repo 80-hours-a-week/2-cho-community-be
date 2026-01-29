@@ -12,10 +12,14 @@ from routers.user_router import user_router
 from routers.post_router import post_router
 from routers.terms_router import terms_router
 from middleware import TimingMiddleware, LoggingMiddleware
-from middleware.exception_handler import global_exception_handler
+from middleware.exception_handler import (
+    global_exception_handler,
+    request_validation_exception_handler,
+)
 from core.config import settings
 from database.connection import init_db, close_db
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 import os
 
 
@@ -56,7 +60,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     max_age=24 * 60 * 60,
-    https_only=False,
+    https_only=settings.HTTPS_ONLY,
+    same_site="lax",
 )
 
 # CORSMiddleware: CORS 정책을 설정
@@ -64,8 +69,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
 )
 
 # 라우터 추가
@@ -80,5 +85,19 @@ os.makedirs("assets", exist_ok=True)
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
+
+@app.get("/health", status_code=200)
+async def health_check():
+    """서버 상태 및 DB 연결 확인."""
+    from database.connection import test_connection
+
+    if await test_connection():
+        return {"status": "ok", "database": "connected"}
+    return {"status": "error", "database": "disconnected"}
+
+
 # 전역 예외 핸들러 등록
+
+
 app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

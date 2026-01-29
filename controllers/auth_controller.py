@@ -9,6 +9,7 @@ from models import user_models
 from models.user_models import User
 from schemas.auth_schemas import LoginRequest
 from dependencies.request_context import get_request_timestamp
+from utils.password import verify_password
 
 
 async def get_my_info(current_user: User, request: Request) -> dict:
@@ -56,7 +57,7 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
 
     user = await user_models.get_user_by_email(credentials.email)
 
-    if not user or user.password != credentials.password:
+    if not user or not verify_password(credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -72,6 +73,13 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
         request.session["session_id"] = session_id
         request.session["email"] = credentials.email
         request.session["nickname"] = user.nickname
+
+    # DB에 세션 저장 (Immediate Block 지원)
+    from datetime import datetime, timedelta
+
+    # 24시간 후 만료
+    expires_at = datetime.now() + timedelta(hours=24)
+    await user_models.create_session(user.id, session_id, expires_at)
 
     return {
         "code": "LOGIN_SUCCESS",
@@ -100,6 +108,12 @@ async def logout(current_user: User, request: Request) -> dict:
         로그아웃 성공 응답 딕셔너리.
     """
     timestamp = get_request_timestamp(request)
+
+    # DB 세션 삭제
+    session_id = request.session.get("session_id")
+    if session_id:
+        await user_models.delete_session(session_id)
+
     request.session.clear()
 
     return {

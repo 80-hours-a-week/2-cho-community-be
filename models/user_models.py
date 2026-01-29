@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from database.connection import get_connection
+from database.connection import get_connection, transactional
 
 
 @dataclass(frozen=True)
@@ -135,6 +135,30 @@ async def get_user_by_email(email: str) -> User | None:
             return _row_to_user(row) if row else None
 
 
+async def get_deleted_user_by_email(email: str) -> User | None:
+    """이메일로 탈퇴한 사용자를 조회합니다.
+
+    Args:
+        email: 조회할 이메일 주소.
+
+    Returns:
+        사용자 객체, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, email, nickname, password, profile_img,
+                       created_at, updated_at, deleted_at
+                FROM user
+                WHERE email = %s AND deleted_at IS NOT NULL
+                """,
+                (email,),
+            )
+            row = await cur.fetchone()
+            return _row_to_user(row) if row else None
+
+
 async def get_user_by_nickname(nickname: str) -> User | None:
     """닉네임으로 사용자를 조회합니다.
 
@@ -152,6 +176,30 @@ async def get_user_by_nickname(nickname: str) -> User | None:
                        created_at, updated_at, deleted_at
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NULL
+                """,
+                (nickname,),
+            )
+            row = await cur.fetchone()
+            return _row_to_user(row) if row else None
+
+
+async def get_deleted_user_by_nickname(nickname: str) -> User | None:
+    """닉네임으로 탈퇴한 사용자를 조회합니다.
+
+    Args:
+        nickname: 조회할 닉네임.
+
+    Returns:
+        사용자 객체, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, email, nickname, password, profile_img,
+                       created_at, updated_at, deleted_at
+                FROM user
+                WHERE nickname = %s AND deleted_at IS NOT NULL
                 """,
                 (nickname,),
             )
@@ -279,7 +327,9 @@ async def update_password(user_id: int, new_password: str) -> User | None:
 async def withdraw_user(user_id: int) -> User | None:
     """회원 탈퇴를 처리합니다.
 
-    소프트 삭제를 수행하여 deleted_at을 현재 시간으로 설정합니다.
+    소프트 삭제를 수행하며, 재가입을 위해 이메일과 닉네임을 익명화합니다.
+    email -> deleted_{uuid}_{timestamp}
+    nickname -> deleted_{uuid_prefix}
 
     Args:
         user_id: 탈퇴할 사용자의 ID.
@@ -287,21 +337,127 @@ async def withdraw_user(user_id: int) -> User | None:
     Returns:
         탈퇴 처리된 사용자 객체, 사용자가 없으면 None.
     """
+    import uuid
+    import time
+
+    unique_id = str(uuid.uuid4())
+    timestamp = int(time.time())
+
+    # 닉네임 길이 제한(20자) 등을 고려하여 짧게 생성
+    # 예: deleted_a1b2c3d4
+    anonymized_nickname = f"deleted_{unique_id[:8]}"
+
+    # 이메일은 Unique 유지를 위해 충분히 길게
+    anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
+
+    async with transactional() as cur:
+        # 1. Sever links: Set author_id to NULL for posts and comments
+        await cur.execute(
+            """
+            UPDATE post SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
+        await cur.execute(
+            """
+            UPDATE comment SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
+
+        # 2. Kill sessions: Delete all active sessions
+        await cur.execute(
+            """
+            DELETE FROM user_session WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+
+        # 3. Anonymize user (Soft Delete)
+        await cur.execute(
+            """
+            UPDATE user
+            SET deleted_at = NOW(),
+                email = %s,
+                nickname = %s
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (anonymized_email, anonymized_nickname, user_id),
+        )
+
+        if cur.rowcount == 0:
+            return None
+
+        # 삭제된 사용자 조회 (deleted_at 포함)
+        await cur.execute(
+            """
+            SELECT id, email, nickname, password, profile_img,
+                   created_at, updated_at, deleted_at
+            FROM user
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
+
+
+async def cleanup_deleted_user(user_id: int) -> User | None:
+    """이미 탈퇴 처리되었으나 정보가 남아있는 사용자(Zombie)를 완전 익명화합니다.
+
+    Args:
+        user_id: 정리할 사용자의 ID.
+
+    Returns:
+        정리된 사용자 객체, 사용자가 없으면 None.
+    """
+    import uuid
+    import time
+
+    unique_id = str(uuid.uuid4())
+    timestamp = int(time.time())
+
+    anonymized_nickname = f"deleted_{unique_id[:8]}"
+    anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
+
     async with get_connection() as conn:
         async with conn.cursor() as cur:
+            # 1. Sever links for zombie
+            await cur.execute(
+                """
+                UPDATE post SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+            await cur.execute(
+                """
+                UPDATE comment SET author_id = NULL WHERE author_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 2. Kill sessions for zombie
+            await cur.execute(
+                """
+                DELETE FROM user_session WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+
+            # 3. Anonymize user
             await cur.execute(
                 """
                 UPDATE user
-                SET deleted_at = NOW()
-                WHERE id = %s AND deleted_at IS NULL
+                SET email = %s,
+                nickname = %s
+                WHERE id = %s
                 """,
-                (user_id,),
+                (anonymized_email, anonymized_nickname, user_id),
             )
 
             if cur.rowcount == 0:
                 return None
 
-            # 삭제된 사용자 조회 (deleted_at 포함)
             await cur.execute(
                 """
                 SELECT id, email, nickname, password, profile_img,
@@ -313,3 +469,109 @@ async def withdraw_user(user_id: int) -> User | None:
             )
             row = await cur.fetchone()
             return _row_to_user(row) if row else None
+
+
+# 세션 관련 함수는 session_models.py에서 정의됨
+# 하위 호환성을 위해 재내보내기
+from models.session_models import (  # noqa: E402
+    create_session,
+    get_session,
+    delete_session,
+    delete_user_sessions,
+)
+
+__all__ = [
+    "User",
+    "create_session",
+    "get_session",
+    "delete_session",
+    "delete_user_sessions",
+]
+
+
+async def get_user_and_session(session_id: str) -> dict | None:
+    """세션 ID로 세션 만료 시간과 사용자 정보를 함께 조회합니다.
+
+    JOIN을 사용하여 데이터베이스 쿼리 횟수를 줄입니다.
+
+    Args:
+        session_id: 세션 ID.
+
+    Returns:
+        딕셔너리: {"expires_at": datetime, "user": User}, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT s.expires_at,
+                       u.id, u.email, u.nickname, u.password, u.profile_img,
+                       u.created_at, u.updated_at, u.deleted_at
+                FROM user_session s
+                INNER JOIN user u ON s.user_id = u.id
+                WHERE s.session_id = %s
+                """,
+                (session_id,),
+            )
+            row = await cur.fetchone()
+
+            if not row:
+                return None
+
+            # row[0] is expires_at
+            # row[1:] corresponds to User columns
+            user = _row_to_user(row[1:])
+
+            return {
+                "expires_at": row[0],
+                "user": user,
+            }
+
+
+async def register_user(
+    email: str,
+    password: str,
+    nickname: str,
+    profile_image_url: str | None = None,
+) -> User:
+    """새 사용자를 등록합니다 (중복 처리 및 Zombie 사용자 정리 포함).
+
+    이메일이나 닉네임이 중복되는 경우:
+    1. 탈퇴한 사용자(Zombie)인지 확인합니다.
+    2. Zombie라면 정보를 익명화하여 정리합니다.
+    3. 사용자 생성을 재시도합니다.
+    4. 재시도 실패 시 IntegrityError를 발생시킵니다.
+
+    Args:
+        email: 이메일 주소.
+        password: 비밀번호.
+        nickname: 닉네임.
+        profile_image_url: 프로필 이미지 URL.
+
+    Returns:
+        생성된 사용자 객체.
+
+    Raises:
+        IntegrityError: 중복된 이메일/닉네임이며 Zombie가 아닌 경우, 또는 재시도 실패 시.
+    """
+    from pymysql.err import IntegrityError
+
+    try:
+        return await add_user(email, password, nickname, profile_image_url)
+    except IntegrityError as e:
+        # Duplicate entry error (1062)
+        if e.args[0] == 1062:
+            # 1. Check if email belongs to a deleted user
+            deleted_user_email = await get_deleted_user_by_email(email)
+            if deleted_user_email:
+                await cleanup_deleted_user(deleted_user_email.id)
+                return await add_user(email, password, nickname, profile_image_url)
+
+            # 2. Check if nickname belongs to a deleted user
+            deleted_user_nick = await get_deleted_user_by_nickname(nickname)
+            if deleted_user_nick:
+                await cleanup_deleted_user(deleted_user_nick.id)
+                return await add_user(email, password, nickname, profile_image_url)
+
+        # Not a zombie or retry failed, re-raise
+        raise e

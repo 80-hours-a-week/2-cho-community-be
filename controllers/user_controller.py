@@ -3,8 +3,6 @@
 사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 등의 기능을 제공합니다.
 """
 
-import os
-import uuid
 from fastapi import HTTPException, Request, status, UploadFile
 from models import user_models
 from models.user_models import User
@@ -15,11 +13,12 @@ from schemas.user_schemas import (
     WithdrawRequest,
 )
 from dependencies.request_context import get_request_timestamp
+from utils.password import hash_password, verify_password
+from utils.file_utils import save_upload_file
+from pymysql.err import IntegrityError
+import traceback
+import logging
 
-# 허용된 이미지 확장자
-ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-# 최대 이미지 크기 (5MB)
-MAX_IMAGE_SIZE = 5 * 1024 * 1024
 # 프로필 이미지 저장 경로
 PROFILE_IMAGE_UPLOAD_DIR = "assets/profiles"
 
@@ -76,11 +75,14 @@ async def get_user(user_id: int, request: Request) -> dict:
     }
 
 
-async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
+async def create_user(
+    user_data: CreateUserRequest, profile_image: UploadFile | None, request: Request
+) -> dict:
     """새로운 사용자를 생성합니다.
 
     Args:
         user_data: 사용자 등록 정보.
+        profile_image: 프로필 이미지 파일 (선택).
         request: FastAPI Request 객체.
 
     Returns:
@@ -111,13 +113,57 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
             },
         )
 
-    # 새로운 사용자 생성
-    await user_models.add_user(
-        email=user_data.email,
-        password=user_data.password,
-        nickname=user_data.nickname,
-        profile_image_url=user_data.profileImageUrl,
-    )
+    # 프로필 이미지 업로드 처리
+    profile_image_url = user_data.profileImageUrl
+    if profile_image:
+        try:
+            profile_image_url = await save_upload_file(
+                profile_image, PROFILE_IMAGE_UPLOAD_DIR
+            )
+        except HTTPException as e:
+            if isinstance(e.detail, dict):
+                e.detail["timestamp"] = timestamp
+            raise e
+        except Exception as e:
+            # 예상치 못한 업로드 에러
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "image_upload_failed",
+                    "message": str(e),
+                    "timestamp": timestamp,
+                },
+            )
+
+    # 비밀번호 해싱 후 새로운 사용자 생성
+    hashed_password = hash_password(user_data.password)
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        await user_models.register_user(
+            email=user_data.email,
+            password=hashed_password,
+            nickname=user_data.nickname,
+            profile_image_url=profile_image_url,
+        )
+    except IntegrityError as e:
+        # Duplicate entry error (1062)
+        if e.args[0] == 1062:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "conflict",
+                    "message": "이미 존재하는 이메일 또는 닉네임입니다.",
+                    "timestamp": timestamp,
+                },
+            )
+        else:
+            logger.error(f"Unhandled IntegrityError: {e}\n{traceback.format_exc()}")
+            raise e
+    except Exception as e:
+        logger.error(f"Unexpected error in create_user: {e}\n{traceback.format_exc()}")
+        raise e
 
     return {
         "code": "SIGNUP_SUCCESS",
@@ -285,16 +331,6 @@ async def change_password(
     """
     timestamp = get_request_timestamp(request)
 
-    # 현재 비밀번호 확인
-    if current_user.password != password_data.current_password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "invalid_current_password",
-                "timestamp": timestamp,
-            },
-        )
-
     # 새 비밀번호 확인
     if password_data.new_password != password_data.new_password_confirm:
         raise HTTPException(
@@ -305,8 +341,8 @@ async def change_password(
             },
         )
 
-    # 새 비밀번호가 현재 비밀번호와 같은지 확인
-    if password_data.new_password == current_user.password:
+    # 새 비밀번호가 현재 비밀번호와 같은지 확인 (해싱된 비밀번호와 비교)
+    if verify_password(password_data.new_password, current_user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -315,8 +351,9 @@ async def change_password(
             },
         )
 
-    # 비밀번호 변경
-    await user_models.update_password(current_user.id, password_data.new_password)
+    # 비밀번호 해싱 후 변경
+    hashed_new_password = hash_password(password_data.new_password)
+    await user_models.update_password(current_user.id, hashed_new_password)
 
     return {
         "code": "PASSWORD_CHANGE_SUCCESS",
@@ -355,8 +392,8 @@ async def withdraw_user(
             },
         )
 
-    # 비밀번호 확인
-    if withdraw_data.password != current_user.password:
+    # 비밀번호 확인 (해싱된 비밀번호와 비교)
+    if not verify_password(withdraw_data.password, current_user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -366,6 +403,12 @@ async def withdraw_user(
         )
 
     # 동의 여부는 Pydantic 스키마에서 처리
+
+    # 회원 탈퇴 처리 (Soft Delete)
+    await user_models.withdraw_user(current_user.id)
+
+    # 세션 초기화 (로그아웃)
+    request.session.clear()
 
     return {
         "code": "WITHDRAWAL_ACCEPTED",
@@ -396,47 +439,18 @@ async def upload_profile_image(
     """
     timestamp = get_request_timestamp(request)
 
-    # 파일 확장자 검증
-    filename = file.filename or ""
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_file_type",
-                "message": f"허용된 이미지 형식: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 파일 크기 검증
-    contents = await file.read()
-    if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "file_too_large",
-                "message": f"파일 크기는 {MAX_IMAGE_SIZE // (1024 * 1024)}MB를 초과할 수 없습니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 유니크한 파일명 생성
-    unique_filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(PROFILE_IMAGE_UPLOAD_DIR, unique_filename)
-
-    # 디렉토리가 없으면 생성
-    os.makedirs(PROFILE_IMAGE_UPLOAD_DIR, exist_ok=True)
-
-    # 파일 저장
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    try:
+        url = await save_upload_file(file, PROFILE_IMAGE_UPLOAD_DIR)
+    except HTTPException as e:
+        if isinstance(e.detail, dict):
+            e.detail["timestamp"] = timestamp
+        raise e
 
     return {
         "code": "IMAGE_UPLOADED",
         "message": "프로필 이미지가 업로드되었습니다.",
         "data": {
-            "url": f"/{file_path}",
+            "url": url,
         },
         "errors": [],
         "timestamp": timestamp,

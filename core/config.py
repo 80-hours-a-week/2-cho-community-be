@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     """
 
     SECRET_KEY: str
+    HTTPS_ONLY: bool = False
     ALLOWED_ORIGINS: list[str] = [
         "http://127.0.0.1:3306",
         "http://127.0.0.1:8000",
@@ -26,11 +27,11 @@ class Settings(BaseSettings):
     ]
 
     # MySQL Database Settings
-    DB_HOST: str = "127.0.0.1"
-    DB_PORT: int = 3306
-    DB_USER: str = "root"
-    DB_PASSWORD: str = ""
-    DB_NAME: str = "community_service"
+    DB_HOST: str
+    DB_PORT: int
+    DB_USER: str
+    DB_PASSWORD: str
+    DB_NAME: str
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

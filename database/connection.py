@@ -20,20 +20,25 @@ async def init_db() -> None:
     애플리케이션 시작 시 호출되어야 합니다.
     """
     global _pool
-    _pool = await aiomysql.create_pool(
-        host=settings.DB_HOST,
-        port=settings.DB_PORT,
-        user=settings.DB_USER,
-        password=settings.DB_PASSWORD,
-        db=settings.DB_NAME,
-        charset="utf8mb4",
-        autocommit=True,
-        minsize=1,
-        maxsize=10,
-    )
-    print(
-        f"MySQL 연결 풀 초기화 완료: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-    )
+    try:
+        _pool = await aiomysql.create_pool(
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            db=settings.DB_NAME,
+            charset="utf8mb4",
+            autocommit=True,
+            minsize=1,
+            maxsize=10,
+            connect_timeout=5,  # 5초 연결 타임아웃
+        )
+        print(
+            f"MySQL 연결 풀 초기화 완료: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+        )
+    except Exception as e:
+        print(f"MySQL 연결 풀 초기화 실패: {e}")
+        raise
 
 
 async def close_db() -> None:
@@ -79,6 +84,28 @@ async def get_connection() -> AsyncGenerator[aiomysql.Connection, None]:
     pool = get_pool()
     async with pool.acquire() as conn:
         yield conn
+
+
+@asynccontextmanager
+async def transactional() -> AsyncGenerator[aiomysql.Cursor, None]:
+    """트랜잭션을 관리하는 컨텍스트 매니저.
+
+    범위 내에서 예외 발생 시 롤백, 정상 종료 시 커밋합니다.
+    주의: 이 컨텍스트 매니저는 커서를 반환합니다.
+
+    Yields:
+        MySQL 커서 객체.
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        try:
+            await conn.begin()
+            async with conn.cursor() as cur:
+                yield cur
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
 
 
 async def test_connection() -> bool:
