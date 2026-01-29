@@ -20,20 +20,25 @@ async def init_db() -> None:
     애플리케이션 시작 시 호출되어야 합니다.
     """
     global _pool
-    _pool = await aiomysql.create_pool(
-        host=settings.DB_HOST,
-        port=settings.DB_PORT,
-        user=settings.DB_USER,
-        password=settings.DB_PASSWORD,
-        db=settings.DB_NAME,
-        charset="utf8mb4",
-        autocommit=True,
-        minsize=1,
-        maxsize=10,
-    )
-    print(
-        f"MySQL 연결 풀 초기화 완료: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-    )
+    try:
+        _pool = await aiomysql.create_pool(
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            db=settings.DB_NAME,
+            charset="utf8mb4",
+            autocommit=True,
+            minsize=1,
+            maxsize=10,
+            connect_timeout=5,  # 5초 연결 타임아웃
+        )
+        print(
+            f"MySQL 연결 풀 초기화 완료: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+        )
+    except Exception as e:
+        print(f"MySQL 연결 풀 초기화 실패: {e}")
+        raise
 
 
 async def close_db() -> None:

@@ -12,10 +12,14 @@ from routers.user_router import user_router
 from routers.post_router import post_router
 from routers.terms_router import terms_router
 from middleware import TimingMiddleware, LoggingMiddleware
-from middleware.exception_handler import global_exception_handler
+from middleware.exception_handler import (
+    global_exception_handler,
+    request_validation_exception_handler,
+)
 from core.config import settings
 from database.connection import init_db, close_db
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 import os
 
 
@@ -80,5 +84,19 @@ os.makedirs("assets", exist_ok=True)
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
+
+@app.get("/health", status_code=200)
+async def health_check():
+    """서버 상태 및 DB 연결 확인."""
+    from database.connection import test_connection
+
+    if await test_connection():
+        return {"status": "ok", "database": "connected"}
+    return {"status": "error", "database": "disconnected"}
+
+
 # 전역 예외 핸들러 등록
+
+
 app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

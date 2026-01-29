@@ -77,11 +77,14 @@ async def get_user(user_id: int, request: Request) -> dict:
     }
 
 
-async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
+async def create_user(
+    user_data: CreateUserRequest, profile_image: UploadFile | None, request: Request
+) -> dict:
     """새로운 사용자를 생성합니다.
 
     Args:
         user_data: 사용자 등록 정보.
+        profile_image: 프로필 이미지 파일 (선택).
         request: FastAPI Request 객체.
 
     Returns:
@@ -112,13 +115,68 @@ async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
             },
         )
 
+    # 프로필 이미지 업로드 처리
+    profile_image_url = user_data.profileImageUrl
+    if profile_image:
+        try:
+            # upload_profile_image 함수 내부 처리를 재사용하거나 로직을 추출해야 하는데,
+            # 여기서는 내부 로직을 직접 수행하거나 헬퍼 함수를 호출하는 게 좋지만,
+            # 간단하게 upload_profile_image를 직접 호출해서 URL만 받을 수는 없음 (Response 객체 리턴 구조).
+            # 따라서 업로드 로직을 직접 구현.
+
+            # 파일 확장자 검증
+            filename = profile_image.filename or ""
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in ALLOWED_IMAGE_EXTENSIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": "invalid_file_type",
+                        "message": f"허용된 이미지 형식: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+                        "timestamp": timestamp,
+                    },
+                )
+
+            # 파일 크기 검증 (read 후 seek 필수)
+            contents = await profile_image.read()
+            if len(contents) > MAX_IMAGE_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": "file_too_large",
+                        "message": f"파일 크기는 {MAX_IMAGE_SIZE // (1024 * 1024)}MB를 초과할 수 없습니다.",
+                        "timestamp": timestamp,
+                    },
+                )
+
+            # 파일 저장
+            unique_filename = f"{uuid.uuid4().hex}{ext}"
+            file_path = os.path.join(PROFILE_IMAGE_UPLOAD_DIR, unique_filename)
+            os.makedirs(PROFILE_IMAGE_UPLOAD_DIR, exist_ok=True)
+            with open(file_path, "wb") as f:
+                f.write(contents)
+
+            profile_image_url = f"/{file_path}"
+        except HTTPException:
+            raise
+        except Exception as e:
+            # 예상치 못한 업로드 에러
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "image_upload_failed",
+                    "message": str(e),
+                    "timestamp": timestamp,
+                },
+            )
+
     # 비밀번호 해싱 후 새로운 사용자 생성
     hashed_password = hash_password(user_data.password)
     await user_models.add_user(
         email=user_data.email,
         password=hashed_password,
         nickname=user_data.nickname,
-        profile_image_url=user_data.profileImageUrl,
+        profile_image_url=profile_image_url,
     )
 
     return {

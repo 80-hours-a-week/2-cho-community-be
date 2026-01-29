@@ -3,7 +3,17 @@
 사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 엔드포인트를 제공합니다.
 """
 
-from fastapi import APIRouter, Depends, Request, status, UploadFile, File
+from fastapi import (
+    APIRouter,
+    Depends,
+    Request,
+    status,
+    UploadFile,
+    File,
+    Form,
+    HTTPException,
+)
+from pydantic import ValidationError
 from controllers import user_controller
 from dependencies.auth import get_current_user, get_optional_user
 from models.user_models import User
@@ -20,17 +30,48 @@ user_router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
 @user_router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(user_data: CreateUserRequest, request: Request) -> dict:
+async def create_user(
+    request: Request,
+    email: str = Form(..., description="이메일 주소"),
+    password: str = Form(..., description="비밀번호"),
+    nickname: str = Form(..., description="닉네임"),
+    profile_image: UploadFile | None = File(None, description="프로필 이미지"),
+) -> dict:
     """새 사용자를 등록합니다.
 
     Args:
-        user_data: 사용자 등록 정보.
         request: FastAPI Request 객체.
+        email: 사용자 이메일.
+        password: 비밀번호.
+        nickname: 닉네임.
+        profile_image: 프로필 이미지 파일.
 
     Returns:
         사용자 생성 성공 응답.
     """
-    return await user_controller.create_user(user_data, request)
+    # CreateUserRequest 모델 생성 (유효성 검사는 모델에서 수행되거나 컨트롤러에서 수행됨)
+    # 컨트롤러가 Form 데이터와 이미지를 모두 처리하도록 변경 예정이므로,
+    # 여기서는 개별 인자를 넘기거나 모델을 만들어 넘길 수 있음.
+    # 기존 컨트롤러 시그니처 변경에 맞춰서 구현.
+
+    # 임시적으로 모델 생성 (유효성 검증 활용)
+    try:
+        user_data = CreateUserRequest(
+            email=email,
+            password=password,
+            nickname=nickname,
+            profileImageUrl=None,  # 이미지는 컨트롤러에서 처리 후 URL 할당
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "validation_error",
+                "message": str(e),
+                "errors": e.errors(include_url=False, include_context=False),
+            },
+        )
+    return await user_controller.create_user(user_data, profile_image, request)
 
 
 @user_router.get("/me", status_code=status.HTTP_200_OK)

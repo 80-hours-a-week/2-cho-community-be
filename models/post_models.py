@@ -148,7 +148,7 @@ async def get_posts(page: int = 0, limit: int = 10) -> list[Post]:
                        created_at, updated_at, deleted_at
                 FROM post
                 WHERE deleted_at IS NULL
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s OFFSET %s
                 """,
                 (limit, offset),
@@ -177,7 +177,7 @@ async def get_posts_by_offset(offset: int = 0, limit: int = 10) -> list[Post]:
                        created_at, updated_at, deleted_at
                 FROM post
                 WHERE deleted_at IS NULL
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s OFFSET %s
                 """,
                 (limit, offset),
