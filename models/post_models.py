@@ -657,3 +657,142 @@ async def clear_all_data() -> None:
             await cur.execute("TRUNCATE TABLE comment")
             await cur.execute("TRUNCATE TABLE post")
             await cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+async def get_posts_with_details(offset: int = 0, limit: int = 10) -> list[dict]:
+    """게시글 목록을 작성자 정보, 좋아요 수, 댓글 수와 함께 조회합니다.
+
+    N+1 문제를 해결하기 위해 JOIN과 서브쿼리를 사용합니다.
+
+    Args:
+        offset: 시작 위치.
+        limit: 조회할 개수.
+
+    Returns:
+        게시글 상세 정보 딕셔너리 목록.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT p.id, p.title, p.content, p.image_url, p.views, p.created_at, p.updated_at,
+                       u.id, u.nickname, u.profile_img,
+                       (SELECT COUNT(*) FROM post_like WHERE post_id = p.id) as likes_count,
+                       (SELECT COUNT(*) FROM comment WHERE post_id = p.id AND deleted_at IS NULL) as comments_count
+                FROM post p
+                LEFT JOIN user u ON p.author_id = u.id
+                WHERE p.deleted_at IS NULL
+                ORDER BY p.created_at DESC, p.id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (limit, offset),
+            )
+            rows = await cur.fetchall()
+
+            results = []
+            for row in rows:
+                results.append(
+                    {
+                        "post_id": row[0],
+                        "title": row[1],
+                        "content": row[2],
+                        "image_url": row[3],
+                        "views_count": row[4],
+                        "created_at": row[5],
+                        "updated_at": row[6],
+                        "author": {
+                            "user_id": row[7],
+                            "nickname": row[8] if row[8] else "탈퇴한 사용자",
+                            "profileImageUrl": row[9]
+                            or "/assets/profiles/default_profile.jpg",
+                        },
+                        "likes_count": row[10],
+                        "comments_count": row[11],
+                    }
+                )
+            return results
+
+
+async def get_post_with_details(post_id: int) -> dict | None:
+    """특정 게시글을 작성자 정보, 좋아요 수와 함께 조회합니다.
+
+    Args:
+        post_id: 게시글 ID.
+
+    Returns:
+        게시글 상세 정보 딕셔너리, 없으면 None.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT p.id, p.title, p.content, p.image_url, p.views, p.created_at, p.updated_at,
+                       u.id, u.nickname, u.profile_img,
+                       (SELECT COUNT(*) FROM post_like WHERE post_id = p.id) as likes_count
+                FROM post p
+                LEFT JOIN user u ON p.author_id = u.id
+                WHERE p.id = %s AND p.deleted_at IS NULL
+                """,
+                (post_id,),
+            )
+            row = await cur.fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "post_id": row[0],
+                "title": row[1],
+                "content": row[2],
+                "image_url": row[3],
+                "views_count": row[4],
+                "created_at": row[5],
+                "updated_at": row[6],
+                "author": {
+                    "user_id": row[7],
+                    "nickname": row[8] if row[8] else "탈퇴한 사용자",
+                    "profileImageUrl": row[9] or "/assets/profiles/default_profile.jpg",
+                },
+                "likes_count": row[10],
+            }
+
+
+async def get_comments_with_author(post_id: int) -> list[dict]:
+    """게시글의 댓글 목록을 작성자 정보와 함께 조회합니다.
+
+    Args:
+        post_id: 게시글 ID.
+
+    Returns:
+        댓글 상세 정보 딕셔너리 목록.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT c.id, c.content, c.created_at, c.updated_at,
+                       u.id, u.nickname, u.profile_img
+                FROM comment c
+                LEFT JOIN user u ON c.author_id = u.id
+                WHERE c.post_id = %s AND c.deleted_at IS NULL
+                ORDER BY c.created_at ASC
+                """,
+                (post_id,),
+            )
+            rows = await cur.fetchall()
+
+            results = []
+            for row in rows:
+                results.append(
+                    {
+                        "comment_id": row[0],
+                        "content": row[1],
+                        "created_at": row[2],
+                        "updated_at": row[3],
+                        "author": {
+                            "user_id": row[4],
+                            "nickname": row[5] if row[5] else "탈퇴한 사용자",
+                            "profileImageUrl": row[6]
+                            or "/assets/profiles/default_profile.jpg",
+                        },
+                    }
+                )
+            return results

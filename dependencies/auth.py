@@ -35,9 +35,11 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
-    # DB에서 세션 확인 (Strict Validation)
-    db_session = await user_models.get_session(session_id)
-    if not db_session:
+    # DB에서 세션과 사용자 정보를 한 번에 조회 (JOIN 사용)
+    result = await user_models.get_user_and_session(session_id)
+
+    # 세션이나 사용자가 존재하지 않음 (Strict Validation)
+    if not result:
         request.session.clear()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -47,8 +49,11 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
+    expires_at = result["expires_at"]
+    user = result["user"]
+
     # 세션 만료 확인
-    if db_session["expires_at"] < datetime.now():
+    if expires_at < datetime.now():
         await user_models.delete_session(session_id)
         request.session.clear()
         raise HTTPException(
@@ -59,14 +64,27 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
-    email = request.session.get("email")
-    user = await user_models.get_user_by_email(email)
+    # 사용자 정보를 찾을 수 없음 (탈퇴했거나 DB에서 삭제됨) - JOIN으로 이미 체크되었지만 명시적 확인
+    # get_user_and_session이 user 객체를 반환했으면 user는 존재함.
+    # 하지만 withdraw 로직에서 soft delete된 경우 user는 존재하지만 deleted_at이 set 되어있을 수 있음.
+    # 다만 기존 로직은 user를 가져와서 체크하지 않고 not user일때만 체크했음.
+    # withdraw_user는 세션을 삭제하므로 여기 도달 안함.
+    # 하지만 안전을 위해 check?
+    # 기존 코드: user = get_user_by_email -> if not user: raise
+    # get_user_by_email implementation: returns User even if deleted_at is set?
+    # Let's check get_user_by_email in user_models.py (usually checks deleted_at IS NULL).
+    # Assuming get_user_and_session also needs to filter deleted_at.
+    # My SQL query selected everything.
+    # Wait, the inner join relies on user existing.
+    # If I want to exclude deleted users, I should add AND u.deleted_at IS NULL to the query or check here.
+    # Let's check here for clarity, or update the query.
+    # Updating the query is better for performance (don't return data if deleted).
+    # But I already wrote the query without deleted_at check?
+    # Actually the `get_user_and_session` query does NOT check `deleted_at IS NULL`.
+    # So I should check it here.
 
-    # 사용자 정보를 찾을 수 없음 (탈퇴했거나 DB에서 삭제됨)
-    if not user:
-        # 세션 초기화 (유효하지 않은 세션 제거)
+    if user.deleted_at:
         request.session.clear()
-
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -95,14 +113,20 @@ async def get_optional_user(request: Request) -> User | None:
     if not session_id:
         return None
 
-    # DB 세션 확인
-    db_session = await user_models.get_session(session_id)
-    if not db_session:
+    # DB 세션과 사용자 확인
+    result = await user_models.get_user_and_session(session_id)
+    if not result:
         return None
+
+    expires_at = result["expires_at"]
+    user = result["user"]
 
     # 만료 확인
-    if db_session["expires_at"] < datetime.now():
+    if expires_at < datetime.now():
         return None
 
-    email = request.session.get("email")
-    return await user_models.get_user_by_email(email)
+    # 삭제된 사용자 확인
+    if user.deleted_at:
+        return None
+
+    return user

@@ -3,9 +3,9 @@
 게시글 CRUD, 이미지 업로드, 좋아요, 댓글 기능을 제공합니다.
 """
 
+import datetime
 from fastapi import HTTPException, Request, UploadFile, status
 from models import post_models
-from models import user_models
 from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from schemas.comment_schemas import CreateCommentRequest, UpdateCommentRequest
@@ -63,33 +63,22 @@ async def get_posts(
             },
         )
 
-    posts = await post_models.get_posts_by_offset(offset, limit)
+    # Optimized query usage
+    posts_data = await post_models.get_posts_with_details(offset, limit)
     total_count = await post_models.get_total_posts_count()
     has_more = offset + limit < total_count
 
-    # 게시꺀 목록을 응답 형태로 변환
-    posts_data = []
-    for post in posts:
-        author = await user_models.get_user_by_id(post.author_id)
-        posts_data.append(
-            {
-                "post_id": post.id,
-                "title": post.title,
-                "content": post.content[:200] + "..."
-                if len(post.content) > 200
-                else post.content,
-                "image_url": post.image_url,
-                "author": {
-                    "user_id": author.id if author else None,
-                    "nickname": author.nickname if author else "탈퇴한 사용자",
-                    "profileImageUrl": author.profileImageUrl if author else None,
-                },
-                "likes_count": await post_models.get_post_likes_count(post.id),
-                "comments_count": await post_models.get_comments_count_by_post(post.id),
-                "views_count": post.views,
-                "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
-        )
+    # Format dates if necessary (model returns datetime objects)
+    for post in posts_data:
+        if isinstance(post["created_at"], datetime.datetime):
+            post["created_at"] = post["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        if post.get("updated_at") and isinstance(post["updated_at"], datetime.datetime):
+            post["updated_at"] = post["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Content truncation
+        content = post["content"]
+        if len(content) > 200:
+            post["content"] = content[:200] + "..."
 
     return {
         "code": "POSTS_RETRIEVED",
@@ -138,8 +127,9 @@ async def get_post(
             },
         )
 
-    post = await post_models.get_post_by_id(post_id)
-    if not post:
+    # Optimized query usage
+    post_data = await post_models.get_post_with_details(post_id)
+    if not post_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -149,59 +139,49 @@ async def get_post(
         )
 
     # 로그인한 사용자인 경우 조회수 증가 (하루 한 번)
+    # Note: get_post_with_details returns a dict, so we access by key
+    # author is nested dict, we need author_id.
+    # Wait, the current optimized query returns author dict but not plain author_id in the top level.
+    # Let me check the query.
+    # Query selects p.author_id implicitly via join? No, it selects u.id.
+    # Result dict has "author": {"user_id": ...}
+    # So post_data["author"]["user_id"] is the author_id.
+
     if current_user:
         await post_models.increment_view_count(post_id, current_user.id)
-        # 조회수 증가 후 다시 조회하여 최신 값 반영
-        post = await post_models.get_post_by_id(post_id)
+        # 조회수 증가 후 다시 조회? or just increment in memory?
+        # Ideally fetch again or increment. For simplicity and consistency with previous logic, fetch again might be safer but expensive.
+        # Logic was: increment then fetch again.
+        # To avoid double fetch of everything, maybe just increment local view count if success?
+        # But previous logic did `get_post_by_id`.
+        # Let's keep it simple: increment, then update the view count in our data object manually to avoid re-query.
+        # But `increment_view_count` returns True if incremented.
+        if await post_models.increment_view_count(post_id, current_user.id):
+            post_data["views_count"] += 1
 
-    author = await user_models.get_user_by_id(post.author_id)
-    comments = await post_models.get_comments_by_post(post_id)
+    comments_data = await post_models.get_comments_with_author(post_id)
 
-    # 댓글 목록 변환
-    comments_data = []
-    for comment in comments:
-        comment_author = await user_models.get_user_by_id(comment.author_id)
-        comments_data.append(
-            {
-                "comment_id": comment.id,
-                "content": comment.content,
-                "author": {
-                    "user_id": comment_author.id if comment_author else None,
-                    "nickname": comment_author.nickname
-                    if comment_author
-                    else "탈퇴한 사용자",
-                    "profileImageUrl": comment_author.profileImageUrl
-                    if comment_author
-                    else None,
-                },
-                "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "updated_at": comment.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if comment.updated_at
-                else None,
-            }
-        )
+    # Format dates
+    if isinstance(post_data["created_at"], datetime.datetime):
+        post_data["created_at"] = post_data["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    if post_data.get("updated_at") and isinstance(
+        post_data["updated_at"], datetime.datetime
+    ):
+        post_data["updated_at"] = post_data["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    for comment in comments_data:
+        if isinstance(comment["created_at"], datetime.datetime):
+            comment["created_at"] = comment["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        if comment.get("updated_at") and isinstance(
+            comment["updated_at"], datetime.datetime
+        ):
+            comment["updated_at"] = comment["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return {
         "code": "POST_RETRIEVED",
         "message": "게시글 조회에 성공했습니다.",
         "data": {
-            "post": {
-                "post_id": post.id,
-                "title": post.title,
-                "content": post.content,
-                "image_url": post.image_url,
-                "author": {
-                    "user_id": author.id if author else None,
-                    "nickname": author.nickname if author else "탈퇴한 사용자",
-                    "profileImageUrl": author.profileImageUrl if author else None,
-                },
-                "likes_count": await post_models.get_post_likes_count(post_id),
-                "views_count": post.views,
-                "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "updated_at": post.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if post.updated_at
-                else None,
-            },
+            "post": post_data,
             "comments": comments_data,
         },
         "errors": [],
