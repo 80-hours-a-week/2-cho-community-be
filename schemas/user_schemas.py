@@ -63,7 +63,7 @@ class CreateUserRequest(BaseModel):
         """
         if not re.match(r"^[a-zA-Z0-9_]{3,10}$", v):
             raise ValueError(
-                "닉네임은 3자 이상 20자 이하의 영문, 숫자, 언더바로 구성하여야 합니다."
+                "닉네임은 3자 이상 10자 이하의 영문, 숫자, 언더바로 구성하여야 합니다."
             )
         return v
 

@@ -573,3 +573,52 @@ async def get_user_and_session(session_id: str) -> dict | None:
                 "expires_at": row[0],
                 "user": user,
             }
+
+
+async def register_user(
+    email: str,
+    password: str,
+    nickname: str,
+    profile_image_url: str | None = None,
+) -> User:
+    """새 사용자를 등록합니다 (중복 처리 및 Zombie 사용자 정리 포함).
+
+    이메일이나 닉네임이 중복되는 경우:
+    1. 탈퇴한 사용자(Zombie)인지 확인합니다.
+    2. Zombie라면 정보를 익명화하여 정리합니다.
+    3. 사용자 생성을 재시도합니다.
+    4. 재시도 실패 시 IntegrityError를 발생시킵니다.
+
+    Args:
+        email: 이메일 주소.
+        password: 비밀번호.
+        nickname: 닉네임.
+        profile_image_url: 프로필 이미지 URL.
+
+    Returns:
+        생성된 사용자 객체.
+
+    Raises:
+        IntegrityError: 중복된 이메일/닉네임이며 Zombie가 아닌 경우, 또는 재시도 실패 시.
+    """
+    from pymysql.err import IntegrityError
+
+    try:
+        return await add_user(email, password, nickname, profile_image_url)
+    except IntegrityError as e:
+        # Duplicate entry error (1062)
+        if e.args[0] == 1062:
+            # 1. Check if email belongs to a deleted user
+            deleted_user_email = await get_deleted_user_by_email(email)
+            if deleted_user_email:
+                await cleanup_deleted_user(deleted_user_email.id)
+                return await add_user(email, password, nickname, profile_image_url)
+
+            # 2. Check if nickname belongs to a deleted user
+            deleted_user_nick = await get_deleted_user_by_nickname(nickname)
+            if deleted_user_nick:
+                await cleanup_deleted_user(deleted_user_nick.id)
+                return await add_user(email, password, nickname, profile_image_url)
+
+        # Not a zombie or retry failed, re-raise
+        raise e
