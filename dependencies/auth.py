@@ -64,24 +64,9 @@ async def get_current_user(request: Request) -> User:
             },
         )
 
-    # 사용자 정보를 찾을 수 없음 (탈퇴했거나 DB에서 삭제됨) - JOIN으로 이미 체크되었지만 명시적 확인
-    # get_user_and_session이 user 객체를 반환했으면 user는 존재함.
-    # 하지만 withdraw 로직에서 soft delete된 경우 user는 존재하지만 deleted_at이 set 되어있을 수 있음.
-    # 다만 기존 로직은 user를 가져와서 체크하지 않고 not user일때만 체크했음.
-    # withdraw_user는 세션을 삭제하므로 여기 도달 안함.
-    # 하지만 안전을 위해 check?
-    # 기존 코드: user = get_user_by_email -> if not user: raise
-    # get_user_by_email implementation: returns User even if deleted_at is set?
-    # Let's check get_user_by_email in user_models.py (usually checks deleted_at IS NULL).
-    # Assuming get_user_and_session also needs to filter deleted_at.
-    # My SQL query selected everything.
-    # Wait, the inner join relies on user existing.
-    # If I want to exclude deleted users, I should add AND u.deleted_at IS NULL to the query or check here.
-    # Let's check here for clarity, or update the query.
-    # Updating the query is better for performance (don't return data if deleted).
-    # But I already wrote the query without deleted_at check?
-    # Actually the `get_user_and_session` query does NOT check `deleted_at IS NULL`.
-    # So I should check it here.
+    # 탈퇴한 사용자 확인
+    # get_user_and_session은 deleted_at을 필터링하지 않으므로 여기서 명시적으로 확인합니다.
+    # 이는 탈퇴 처리된 사용자가 유효한 세션을 가지고 있더라도 접근을 차단하기 위함입니다.
 
     if user.deleted_at:
         request.session.clear()

@@ -63,12 +63,12 @@ async def get_posts(
             },
         )
 
-    # Optimized query usage
+    # 최적화된 쿼리 사용 (N+1 문제 해결)
     posts_data = await post_models.get_posts_with_details(offset, limit)
     total_count = await post_models.get_total_posts_count()
     has_more = offset + limit < total_count
 
-    # Format dates if necessary (model returns datetime objects)
+    # 날짜 포맷팅 (모델이 datetime 객체를 반환하므로 문자열로 변환)
     for post in posts_data:
         if isinstance(post["created_at"], datetime.datetime):
             post["created_at"] = post["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -127,7 +127,7 @@ async def get_post(
             },
         )
 
-    # Optimized query usage
+    # 최적화된 쿼리 사용
     post_data = await post_models.get_post_with_details(post_id)
     if not post_data:
         raise HTTPException(
@@ -139,29 +139,17 @@ async def get_post(
         )
 
     # 로그인한 사용자인 경우 조회수 증가 (하루 한 번)
-    # Note: get_post_with_details returns a dict, so we access by key
-    # author is nested dict, we need author_id.
-    # Wait, the current optimized query returns author dict but not plain author_id in the top level.
-    # Let me check the query.
-    # Query selects p.author_id implicitly via join? No, it selects u.id.
-    # Result dict has "author": {"user_id": ...}
-    # So post_data["author"]["user_id"] is the author_id.
+    # 참고: post_data['author']는 딕셔너리 형태이며, 작성자 ID는 post_data['author']['id']에 있습니다.
 
     if current_user:
-        await post_models.increment_view_count(post_id, current_user.id)
-        # 조회수 증가 후 다시 조회? or just increment in memory?
-        # Ideally fetch again or increment. For simplicity and consistency with previous logic, fetch again might be safer but expensive.
-        # Logic was: increment then fetch again.
-        # To avoid double fetch of everything, maybe just increment local view count if success?
-        # But previous logic did `get_post_by_id`.
-        # Let's keep it simple: increment, then update the view count in our data object manually to avoid re-query.
-        # But `increment_view_count` returns True if incremented.
+        # 조회수 증가 시도 (이미 오늘 조회했다면 False 반환)
+        # 성공적으로 증가했다면, 로컬 데이터도 업데이트하여 사용자에게 최신 조회수 표시
         if await post_models.increment_view_count(post_id, current_user.id):
             post_data["views_count"] += 1
 
     comments_data = await post_models.get_comments_with_author(post_id)
 
-    # Format dates
+    # 날짜 포맷팅
     if isinstance(post_data["created_at"], datetime.datetime):
         post_data["created_at"] = post_data["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
     if post_data.get("updated_at") and isinstance(
