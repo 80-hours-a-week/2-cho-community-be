@@ -420,59 +420,58 @@ async def cleanup_deleted_user(user_id: int) -> User | None:
     anonymized_nickname = f"deleted_{unique_id[:8]}"
     anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
 
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            # 1. Sever links for zombie
-            await cur.execute(
-                """
-                UPDATE post SET author_id = NULL WHERE author_id = %s
-                """,
-                (user_id,),
-            )
-            await cur.execute(
-                """
-                UPDATE comment SET author_id = NULL WHERE author_id = %s
-                """,
-                (user_id,),
-            )
+    async with transactional() as cur:
+        # 1. Sever links for zombie
+        await cur.execute(
+            """
+            UPDATE post SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
+        await cur.execute(
+            """
+            UPDATE comment SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
 
-            # 2. Kill sessions for zombie
-            await cur.execute(
-                """
-                DELETE FROM user_session WHERE user_id = %s
-                """,
-                (user_id,),
-            )
+        # 2. Kill sessions for zombie
+        await cur.execute(
+            """
+            DELETE FROM user_session WHERE user_id = %s
+            """,
+            (user_id,),
+        )
 
-            # 3. Anonymize user
-            await cur.execute(
-                """
-                UPDATE user
-                SET email = %s,
-                nickname = %s
-                WHERE id = %s
-                """,
-                (anonymized_email, anonymized_nickname, user_id),
-            )
+        # 3. Anonymize user
+        await cur.execute(
+            """
+            UPDATE user
+            SET email = %s,
+            nickname = %s
+            WHERE id = %s
+            """,
+            (anonymized_email, anonymized_nickname, user_id),
+        )
 
-            if cur.rowcount == 0:
-                return None
+        if cur.rowcount == 0:
+            return None
 
-            await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
-                FROM user
-                WHERE id = %s
-                """,
-                (user_id,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+        await cur.execute(
+            """
+            SELECT id, email, nickname, password, profile_img,
+                   created_at, updated_at, deleted_at
+            FROM user
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 # 세션 관련 함수는 session_models.py에서 정의됨
-# 하위 호환성을 위해 재내보내기
+# 하위 호환성을 위해 다시 내보내기
 from models.session_models import (  # noqa: E402
     create_session,
     get_session,
