@@ -351,7 +351,7 @@ async def withdraw_user(user_id: int) -> User | None:
     anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
 
     async with transactional() as cur:
-        # 1. Sever links: Set author_id to NULL for posts and comments
+        # 1. 연결 끊기: 게시글과 댓글의 author_id를 NULL로 설정
         await cur.execute(
             """
             UPDATE post SET author_id = NULL WHERE author_id = %s
@@ -365,7 +365,7 @@ async def withdraw_user(user_id: int) -> User | None:
             (user_id,),
         )
 
-        # 2. Kill sessions: Delete all active sessions
+        # 2. 세션 종료: 모든 활성 세션 삭제
         await cur.execute(
             """
             DELETE FROM user_session WHERE user_id = %s
@@ -373,7 +373,7 @@ async def withdraw_user(user_id: int) -> User | None:
             (user_id,),
         )
 
-        # 3. Anonymize user (Soft Delete)
+        # 3. 사용자 익명화 (소프트 삭제)
         await cur.execute(
             """
             UPDATE user
@@ -420,59 +420,58 @@ async def cleanup_deleted_user(user_id: int) -> User | None:
     anonymized_nickname = f"deleted_{unique_id[:8]}"
     anonymized_email = f"deleted_{unique_id}_{timestamp}@deleted.user"
 
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            # 1. Sever links for zombie
-            await cur.execute(
-                """
-                UPDATE post SET author_id = NULL WHERE author_id = %s
-                """,
-                (user_id,),
-            )
-            await cur.execute(
-                """
-                UPDATE comment SET author_id = NULL WHERE author_id = %s
-                """,
-                (user_id,),
-            )
+    async with transactional() as cur:
+        # 1. 좀비 사용자의 연결 끊기
+        await cur.execute(
+            """
+            UPDATE post SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
+        await cur.execute(
+            """
+            UPDATE comment SET author_id = NULL WHERE author_id = %s
+            """,
+            (user_id,),
+        )
 
-            # 2. Kill sessions for zombie
-            await cur.execute(
-                """
-                DELETE FROM user_session WHERE user_id = %s
-                """,
-                (user_id,),
-            )
+        # 2. 좀비 사용자의 세션 종료
+        await cur.execute(
+            """
+            DELETE FROM user_session WHERE user_id = %s
+            """,
+            (user_id,),
+        )
 
-            # 3. Anonymize user
-            await cur.execute(
-                """
-                UPDATE user
-                SET email = %s,
-                nickname = %s
-                WHERE id = %s
-                """,
-                (anonymized_email, anonymized_nickname, user_id),
-            )
+        # 3. 사용자 익명화
+        await cur.execute(
+            """
+            UPDATE user
+            SET email = %s,
+            nickname = %s
+            WHERE id = %s
+            """,
+            (anonymized_email, anonymized_nickname, user_id),
+        )
 
-            if cur.rowcount == 0:
-                return None
+        if cur.rowcount == 0:
+            return None
 
-            await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
-                FROM user
-                WHERE id = %s
-                """,
-                (user_id,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+        await cur.execute(
+            """
+            SELECT id, email, nickname, password, profile_img,
+                   created_at, updated_at, deleted_at
+            FROM user
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 # 세션 관련 함수는 session_models.py에서 정의됨
-# 하위 호환성을 위해 재내보내기
+# 하위 호환성을 위해 다시 내보내기
 from models.session_models import (  # noqa: E402
     create_session,
     get_session,
@@ -559,19 +558,19 @@ async def register_user(
     try:
         return await add_user(email, password, nickname, profile_image_url)
     except IntegrityError as e:
-        # Duplicate entry error (1062)
+        # 중복 엔트리 에러 (1062)
         if e.args[0] == 1062:
-            # 1. Check if email belongs to a deleted user
+            # 1. 이메일이 탈퇴한 사용자의 것인지 확인
             deleted_user_email = await get_deleted_user_by_email(email)
             if deleted_user_email:
                 await cleanup_deleted_user(deleted_user_email.id)
                 return await add_user(email, password, nickname, profile_image_url)
 
-            # 2. Check if nickname belongs to a deleted user
+            # 2. 닉네임이 탈퇴한 사용자의 것인지 확인
             deleted_user_nick = await get_deleted_user_by_nickname(nickname)
             if deleted_user_nick:
                 await cleanup_deleted_user(deleted_user_nick.id)
                 return await add_user(email, password, nickname, profile_image_url)
 
-        # Not a zombie or retry failed, re-raise
+        # 좀비 사용자가 아니거나 재시도 실패 시 예외 다시 발생
         raise e

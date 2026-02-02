@@ -8,6 +8,32 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+def create_response(
+    code: str,
+    message: str,
+    data: dict[str, Any] | None = None,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """표준 API 응답 딕셔너리를 생성합니다.
+
+    Args:
+        code: 응답 코드 (예: "SUCCESS", "POST_CREATED").
+        message: 사용자에게 표시할 메시지.
+        data: 응답 데이터 (기본값: 빈 딕셔너리).
+        timestamp: 타임스탬프 (기본값: 현재 시간).
+
+    Returns:
+        표준 형식의 응답 딕셔너리.
+    """
+    return {
+        "code": code,
+        "message": message,
+        "data": data if data is not None else {},
+        "errors": [],
+        "timestamp": timestamp or datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
 class APIResponse(BaseModel):
     """표준 API 응답 모델.
 

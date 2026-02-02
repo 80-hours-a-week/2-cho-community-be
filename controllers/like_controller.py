@@ -36,9 +36,9 @@ async def like_post(
             },
         )
 
-    # 이미 좋아요를 눌렀는지 확인
-    existing_like = await like_models.get_like(post_id, current_user.id)
-    if existing_like:
+    # 좋아요 추가 시도 (중복이면 None 반환)
+    like = await like_models.add_like(post_id, current_user.id)
+    if like is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -47,8 +47,6 @@ async def like_post(
                 "timestamp": timestamp,
             },
         )
-
-    await like_models.add_like(post_id, current_user.id)
 
     return {
         "code": "LIKE_ADDED",
@@ -91,9 +89,9 @@ async def unlike_post(
             },
         )
 
-    # 좋아요를 눌렀는지 확인
-    existing_like = await like_models.get_like(post_id, current_user.id)
-    if not existing_like:
+    # 좋아요 삭제 시도 (없으면 False 반환)
+    removed = await like_models.remove_like(post_id, current_user.id)
+    if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -102,8 +100,6 @@ async def unlike_post(
                 "timestamp": timestamp,
             },
         )
-
-    await like_models.remove_like(post_id, current_user.id)
 
     return {
         "code": "LIKE_REMOVED",

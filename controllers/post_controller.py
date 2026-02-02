@@ -9,8 +9,7 @@ from models import post_models
 from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from dependencies.request_context import get_request_timestamp
-
-
+from utils.formatters import format_datetime
 from utils.file_utils import save_upload_file
 
 # 이미지 저장 경로
@@ -67,14 +66,12 @@ async def get_posts(
     total_count = await post_models.get_total_posts_count()
     has_more = offset + limit < total_count
 
-    # 날짜 포맷팅 (모델이 datetime 객체를 반환하므로 문자열로 변환)
+    # 날짜 포맷팅 및 내용 요약
     for post in posts_data:
-        if isinstance(post["created_at"], datetime.datetime):
-            post["created_at"] = post["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
-        if post.get("updated_at") and isinstance(post["updated_at"], datetime.datetime):
-            post["updated_at"] = post["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        post["created_at"] = format_datetime(post["created_at"])
+        post["updated_at"] = format_datetime(post.get("updated_at"))
 
-        # Content truncation
+        # 내용 요약 (Truncation)
         content = post["content"]
         if len(content) > 200:
             post["content"] = content[:200] + "..."
@@ -149,20 +146,12 @@ async def get_post(
     comments_data = await post_models.get_comments_with_author(post_id)
 
     # 날짜 포맷팅
-    if isinstance(post_data["created_at"], datetime.datetime):
-        post_data["created_at"] = post_data["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
-    if post_data.get("updated_at") and isinstance(
-        post_data["updated_at"], datetime.datetime
-    ):
-        post_data["updated_at"] = post_data["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+    post_data["created_at"] = format_datetime(post_data["created_at"])
+    post_data["updated_at"] = format_datetime(post_data.get("updated_at"))
 
     for comment in comments_data:
-        if isinstance(comment["created_at"], datetime.datetime):
-            comment["created_at"] = comment["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
-        if comment.get("updated_at") and isinstance(
-            comment["updated_at"], datetime.datetime
-        ):
-            comment["updated_at"] = comment["updated_at"].strftime("%Y-%m-%dT%H:%M:%SZ")
+        comment["created_at"] = format_datetime(comment["created_at"])
+        comment["updated_at"] = format_datetime(comment.get("updated_at"))
 
     return {
         "code": "POST_RETRIEVED",
