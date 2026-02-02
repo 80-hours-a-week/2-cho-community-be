@@ -45,6 +45,10 @@ class User:
         return self.profile_image_url or "/assets/profiles/default_profile.jpg"
 
 
+# 공통으로 사용되는 SELECT 필드
+USER_SELECT_FIELDS = "id, email, nickname, password, profile_img, created_at, updated_at, deleted_at"
+
+
 def _row_to_user(row: tuple) -> User:
     """데이터베이스 행을 User 객체로 변환합니다.
 
@@ -75,9 +79,8 @@ async def get_users() -> list[User]:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img, 
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE deleted_at IS NULL
                 ORDER BY id
@@ -99,9 +102,8 @@ async def get_user_by_id(user_id: int) -> User | None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE id = %s AND deleted_at IS NULL
                 """,
@@ -123,9 +125,8 @@ async def get_user_by_email(email: str) -> User | None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE email = %s AND deleted_at IS NULL
                 """,
@@ -147,9 +148,8 @@ async def get_deleted_user_by_email(email: str) -> User | None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE email = %s AND deleted_at IS NOT NULL
                 """,
@@ -171,9 +171,8 @@ async def get_user_by_nickname(nickname: str) -> User | None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NULL
                 """,
@@ -195,9 +194,8 @@ async def get_deleted_user_by_nickname(nickname: str) -> User | None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NOT NULL
                 """,
@@ -237,9 +235,8 @@ async def add_user(
 
             # 생성된 사용자 조회
             await cur.execute(
-                """
-                SELECT id, email, nickname, password, profile_img,
-                       created_at, updated_at, deleted_at
+                f"""
+                SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE id = %s
                 """,
@@ -390,9 +387,8 @@ async def withdraw_user(user_id: int) -> User | None:
 
         # 삭제된 사용자 조회 (deleted_at 포함)
         await cur.execute(
-            """
-            SELECT id, email, nickname, password, profile_img,
-                   created_at, updated_at, deleted_at
+            f"""
+            SELECT {USER_SELECT_FIELDS}
             FROM user
             WHERE id = %s
             """,
@@ -458,9 +454,8 @@ async def cleanup_deleted_user(user_id: int) -> User | None:
             return None
 
         await cur.execute(
-            """
-            SELECT id, email, nickname, password, profile_img,
-                   created_at, updated_at, deleted_at
+            f"""
+            SELECT {USER_SELECT_FIELDS}
             FROM user
             WHERE id = %s
             """,
