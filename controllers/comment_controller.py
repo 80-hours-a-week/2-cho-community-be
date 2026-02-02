@@ -5,6 +5,7 @@ from models import post_models, comment_models
 from models.user_models import User
 from schemas.comment_schemas import CreateCommentRequest, UpdateCommentRequest
 from dependencies.request_context import get_request_timestamp
+from utils.formatters import format_datetime
 
 
 async def create_comment(
@@ -51,7 +52,7 @@ async def create_comment(
         "data": {
             "comment_id": comment.id,
             "content": comment.content,
-            "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "created_at": format_datetime(comment.created_at),
         },
         "errors": [],
         "timestamp": timestamp,
@@ -135,7 +136,7 @@ async def update_comment(
         "data": {
             "comment_id": updated_comment.id,
             "content": updated_comment.content,
-            "updated_at": updated_comment.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "updated_at": format_datetime(updated_comment.updated_at),
         },
         "errors": [],
         "timestamp": timestamp,
