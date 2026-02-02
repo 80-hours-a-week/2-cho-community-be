@@ -11,33 +11,8 @@ from schemas.auth_schemas import LoginRequest
 from dependencies.request_context import get_request_timestamp
 from utils.password import verify_password
 
-
-async def get_my_info(current_user: User, request: Request) -> dict:
-    """현재 로그인 중인 사용자의 정보를 반환합니다.
-
-    Args:
-        current_user: 현재 인증된 사용자 객체.
-        request: FastAPI Request 객체.
-
-    Returns:
-        사용자 정보가 포함된 응답 딕셔너리.
-    """
-    timestamp = get_request_timestamp(request)
-
-    return {
-        "code": "AUTH_SUCCESS",
-        "message": "현재 로그인 중인 상태입니다.",
-        "data": {
-            "user": {
-                "user_id": current_user.id,
-                "email": current_user.email,
-                "nickname": current_user.nickname,
-                "profileImageUrl": current_user.profileImageUrl,
-            },
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+# get_my_info는 user_controller에서 정의되어 있으므로 재사용
+from controllers.user_controller import get_my_info  # noqa: F401
 
 
 async def login(credentials: LoginRequest, request: Request) -> dict:
@@ -75,10 +50,10 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
         request.session["nickname"] = user.nickname
 
     # DB에 세션 저장 (Immediate Block 지원)
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    # 24시간 후 만료
-    expires_at = datetime.now() + timedelta(hours=24)
+    # 24시간 후 만료 (UTC 기준)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     await user_models.create_session(user.id, session_id, expires_at)
 
     return {
