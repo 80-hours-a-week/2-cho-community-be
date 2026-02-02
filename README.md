@@ -8,6 +8,7 @@ AWS AI School 2기 3주차 과제: 커뮤니티 백엔드 서버
     - `get_connection()` 대신 `transactional()` 적용
     - 세션 만료 비교 시 `timezone.utc` 적용
     - 세션 생성 시 UTC 사용
+    - 하드코딩된 경로 설정 개선
     - 불필요한 이중 체크 제거
     - SQL 중복 제거
     - 미사용 함수 삭제
