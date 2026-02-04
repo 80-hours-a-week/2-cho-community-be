@@ -43,20 +43,20 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
                                   │ HTTP (JSON/FormData)
                                   │ credentials: include (Cookie)
                                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      FastAPI Backend (Port 8000)                │
-│  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │ Routers  │→ │Controllers │→ │  Models  │→ │ aiomysql Pool│   │
-│  └──────────┘  └────────────┘  └──────────┘  └──────────────┘   │
-│                                                                 │
-│  Middleware: CORS → Session → Logging → Timing                  │
-└─────────────────────────────────┬───────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      FastAPI Backend (Port 8000)                             │
+│  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ Routers  │→ │Controllers │→ │ Services │→ │  Models  │→ │ aiomysql Pool│  │
+│  └──────────┘  └────────────┘  └──────────┘  └──────────┘  └──────────────┘  │
+│                                                                              │
+│  Middleware: CORS → Session → Logging → Timing                               │
+└─────────────────────────────────┬────────────────────────────────────────────┘
                                   │ Async Connection Pool
                                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        MySQL Database                           │
-│   Tables: user, user_session, post, comment, post_like          │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        MySQL Database                                        │
+│   Tables: user, user_session, post, comment, post_like, image, post_view_log │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2. 데이터베이스 설계
@@ -105,6 +105,34 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 └──────────────────┘
 ```
 
+#### Image Table
+```text
+┌──────────────────┐
+│      image       │
+├──────────────────┤
+│ id (PK)          │
+│ image_url        │
+│ type (ENUM)      │
+│ uploader_id (FK) │
+│ uploaded_at      │
+└──────────────────┘
+```
+
+#### Post View Log Table (for Unique Views)
+```text
+┌──────────────────┐
+│  post_view_log   │
+├──────────────────┤
+│ id (PK)          │
+│ user_id (FK)     │
+│ post_id (FK)     │
+│ view_date        │
+│ created_at       │
+│ UNIQUE(user_id,  │
+│  post_id, date)  │
+└──────────────────┘
+```
+
 #### 주요 설계 결정
 
 - **Soft Delete**: `user`, `post`, `comment` 테이블에 `deleted_at` 컬럼 사용. 물리적 삭제 대신 논리적 삭제로 데이터 보존.
@@ -130,8 +158,10 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 |--------|----------|------|------|
 | POST | `/v1/users` | 회원가입 | X |
 | GET | `/v1/users/{user_id}` | 사용자 프로필 조회 | X |
-| PATCH | `/v1/users/{user_id}` | 프로필 수정 | O |
-| DELETE | `/v1/users/{user_id}` | 회원 탈퇴 | O |
+| PATCH | `/v1/users/me` | 프로필 수정 (본인) | O |
+| DELETE | `/v1/users/me` | 회원 탈퇴 (본인) | O |
+| PUT | `/v1/users/me/password` | 비밀번호 변경 | O |
+| POST | `/v1/users/profile/image` | 프로필 이미지 업로드 | O |
 
 #### 게시글 API (`/v1/posts`)
 
@@ -146,7 +176,10 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 | DELETE | `/v1/posts/{post_id}/likes` | 좋아요 취소 | O |
 | POST | `/v1/posts/{post_id}/comments` | 댓글 작성 | O |
 | PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
+| POST | `/v1/posts/{post_id}/comments` | 댓글 작성 | O |
+| PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
 | DELETE | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 삭제 | O (작성자) |
+| POST | `/v1/posts/image` | 게시글 이미지 업로드 | O |
 
 #### 응답 형식
 
