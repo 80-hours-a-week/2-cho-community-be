@@ -286,6 +286,19 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
+- 2026-02-04 (3차) - 보안 강화
+  - Rate Limiter 미들웨어 추가 (`middleware/rate_limiter.py`)
+    - IP 기반 요청 속도 제한 (브루트포스 방지)
+    - 로그인: 1분에 5회, 회원가입: 1분에 3회
+    - 엔드포인트별 설정 가능
+  - 프로덕션 에러 마스킹 (`DEBUG` 설정 추가)
+    - `DEBUG=False`일 때 상세 에러 정보 숨김
+    - 트래킹 ID는 항상 포함하여 로그 추적 가능
+  - 코드 리팩토링
+    - 닉네임 검증 로직을 `_NICKNAME_PATTERN` 상수로 추출
+    - 에러 응답 헬퍼 함수 추가 (`utils/exceptions.py`)
+    - `post_controller.py`에 에러 헬퍼 적용
+
 - 2026-02-04 (2차)
   - 버그 수정
     - `post_view_log` 테이블에 `UNIQUE KEY (user_id, post_id, view_date)` 누락으로 조회수가 매 방문마다 증가하던 버그 수정

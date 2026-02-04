@@ -11,6 +11,7 @@ from schemas.common import create_response
 from dependencies.request_context import get_request_timestamp
 from utils.formatters import format_datetime
 from utils.file_utils import save_upload_file
+from utils.exceptions import not_found_error, forbidden_error, bad_request_error
 from core.config import settings
 
 # 이미지 저장 경로 (설정에서 로드)
@@ -217,24 +218,11 @@ async def update_post(
 
     post = await post_models.get_post_by_id(post_id)
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
+        raise not_found_error("post", timestamp)
 
     # 작성자 확인
     if post.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "not_author",
-                "message": "게시글 작성자만 수정할 수 있습니다.",
-                "timestamp": timestamp,
-            },
-        )
+        raise forbidden_error("edit", timestamp, "게시글 작성자만 수정할 수 있습니다.")
 
     # 변경 사항 수집
     updates = {}
@@ -246,13 +234,7 @@ async def update_post(
         updates["image_url"] = post_data.image_url
 
     if not updates:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "no_changes_provided",
-                "timestamp": timestamp,
-            },
-        )
+        raise bad_request_error("no_changes_provided", timestamp)
 
     updated_post = await post_models.update_post(
         post_id,
@@ -295,28 +277,19 @@ async def delete_post(
 
     post = await post_models.get_post_by_id(post_id)
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": "post_not_found",
-                "timestamp": timestamp,
-            },
-        )
+        raise not_found_error("post", timestamp)
 
     # 작성자 확인
     if post.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "not_author",
-                "message": "게시글 작성자만 삭제할 수 있습니다.",
-                "timestamp": timestamp,
-            },
+        raise forbidden_error(
+            "delete", timestamp, "게시글 작성자만 삭제할 수 있습니다."
         )
 
     await post_models.delete_post(post_id)
 
-    return create_response("POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp)
+    return create_response(
+        "POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp
+    )
 
 
 async def upload_image(
