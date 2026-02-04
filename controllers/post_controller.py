@@ -19,7 +19,20 @@ async def get_posts(
     limit: int,
     request: Request,
 ) -> dict:
-    """게시글 목록을 조회합니다."""
+    """
+    게시글 목록을 조회합니다.
+
+    Args:
+        offset (int): 조회 시작 위치 (0 이상)
+        limit (int): 조회할 게시글 수 (1~100)
+        request (Request): FastAPI Request 객체
+
+    Returns:
+        dict: 게시글 목록과 페이지네이션 정보를 포함한 응답 딕셔너리
+
+    Raises:
+        HTTPException: offset이나 limit가 유효하지 않을 경우 400 에러 발생
+    """
     timestamp = get_request_timestamp(request)
 
     if offset < 0:
@@ -64,7 +77,20 @@ async def get_posts(
 async def get_post(
     post_id: int, request: Request, current_user: User | None = None
 ) -> dict:
-    """게시글 상세 정보를 조회합니다."""
+    """
+    게시글 상세 정보를 조회합니다.
+
+    Args:
+        post_id (int): 조회할 게시글 ID
+        request (Request): FastAPI Request 객체
+        current_user (User | None, optional): 현재 로그인한 사용자 정보. Defaults to None.
+
+    Returns:
+        dict: 게시글 상세 정보를 포함한 응답 딕셔너리
+
+    Raises:
+        HTTPException: post_id가 유효하지 않거나(400), 게시글을 찾을 수 없는 경우(404)
+    """
     timestamp = get_request_timestamp(request)
 
     if post_id < 1:
@@ -92,7 +118,17 @@ async def create_post(
     current_user: User,
     request: Request,
 ) -> dict:
-    """새 게시글을 생성합니다."""
+    """
+    새 게시글을 생성합니다.
+
+    Args:
+        post_data (CreatePostRequest): 생성할 게시글 데이터 (제목, 내용, 이미지 URL 등)
+        current_user (User): 현재 로그인한 사용자
+        request (Request): FastAPI Request 객체
+
+    Returns:
+        dict: 생성된 게시글 ID를 포함한 응답 딕셔너리
+    """
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
@@ -112,7 +148,21 @@ async def update_post(
     current_user: User,
     request: Request,
 ) -> dict:
-    """게시글을 수정합니다."""
+    """
+    게시글을 수정합니다.
+
+    Args:
+        post_id (int): 수정할 게시글 ID
+        post_data (UpdatePostRequest): 수정할 게시글 데이터
+        current_user (User): 현재 로그인한 사용자 (작성자 본인이어야 함)
+        request (Request): FastAPI Request 객체
+
+    Returns:
+        dict: 수정된 게시글 데이터를 포함한 응답 딕셔너리
+
+    Raises:
+        HTTPException: 권한이 없거나 게시글이 없는 경우
+    """
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
@@ -138,7 +188,20 @@ async def delete_post(
     current_user: User,
     request: Request,
 ) -> dict:
-    """게시글을 삭제합니다."""
+    """
+    게시글을 삭제합니다.
+
+    Args:
+        post_id (int): 삭제할 게시글 ID
+        current_user (User): 현재 로그인한 사용자 (작성자 본인이어야 함)
+        request (Request): FastAPI Request 객체
+
+    Returns:
+        dict: 삭제 성공 메시지를 포함한 응답 딕셔너리
+
+    Raises:
+        HTTPException: 권한이 없거나 게시글이 없는 경우
+    """
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
@@ -154,7 +217,20 @@ async def upload_image(
     current_user: User,
     request: Request,
 ) -> dict:
-    """이미지를 업로드합니다."""
+    """
+    이미지를 업로드합니다.
+
+    Args:
+        file (UploadFile): 업로드할 이미지 파일
+        current_user (User): 현재 로그인한 사용자
+        request (Request): FastAPI Request 객체
+
+    Returns:
+        dict: 업로드된 이미지 URL을 포함한 응답 딕셔너리
+
+    Raises:
+        HTTPException: 파일 형식이 잘못되었거나 업로드 실패 시
+    """
     timestamp = get_request_timestamp(request)
 
     try:
