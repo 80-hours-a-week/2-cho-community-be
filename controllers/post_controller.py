@@ -3,7 +3,6 @@
 게시글 CRUD, 이미지 업로드, 좋아요, 댓글 기능을 제공합니다.
 """
 
-import datetime
 from fastapi import HTTPException, Request, UploadFile, status
 from models import post_models
 from models.user_models import User

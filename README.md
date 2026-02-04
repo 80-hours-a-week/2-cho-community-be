@@ -286,7 +286,20 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
-- 2026-02-04
+- 2026-02-04 (2차)
+  - 버그 수정
+    - `post_view_log` 테이블에 `UNIQUE KEY (user_id, post_id, view_date)` 누락으로 조회수가 매 방문마다 증가하던 버그 수정
+    - `view_date` 컬럼을 VIRTUAL에서 STORED로 변경 (UNIQUE 인덱스 지원)
+  - 코드 중복 제거
+    - 댓글 스키마 검증 로직을 `_validate_comment_content()` 공통 함수로 추출
+    - 비밀번호 검증 로직을 `_validate_password()` + `_PASSWORD_PATTERN` 상수로 추출
+    - `_build_author_dict`를 `schemas/common.py`의 `build_author_dict`로 이동, `comment_models.py`에서도 공유
+    - 기본 프로필 이미지 경로를 `DEFAULT_PROFILE_IMAGE` 상수로 통합
+  - 코드 정리
+    - 테스트 헬퍼 `clear_all_data()`를 `post_models.py`에서 `tests/conftest.py`로 이동
+    - `post_controller.py`의 미사용 `import datetime` 제거
+
+- 2026-02-04 (1차)
   - 코드 중복 제거
     - `withdraw_user`/`cleanup_deleted_user` 공통 로직을 `_disconnect_and_anonymize_user`로 추출
     - 모든 컨트롤러의 응답 딕셔너리를 `create_response` 헬퍼로 통일

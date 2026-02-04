@@ -4,9 +4,20 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from main import app
-from database.connection import init_db, close_db
-from models.post_models import clear_all_data
+from database.connection import get_connection, init_db, close_db
 from faker import Faker
+
+
+async def clear_all_data() -> None:
+    """테스트용 헬퍼: 모든 게시글 관련 데이터를 삭제합니다."""
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+            await cur.execute("TRUNCATE TABLE post_view_log")
+            await cur.execute("TRUNCATE TABLE post_like")
+            await cur.execute("TRUNCATE TABLE comment")
+            await cur.execute("TRUNCATE TABLE post")
+            await cur.execute("SET FOREIGN_KEY_CHECKS = 1")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

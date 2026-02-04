@@ -8,6 +8,7 @@ from datetime import datetime
 
 from database.connection import get_connection, transactional
 from models.comment_models import get_comments_with_author
+from schemas.common import build_author_dict
 
 
 @dataclass
@@ -247,42 +248,6 @@ async def increment_view_count(post_id: int, user_id: int) -> bool:
         return False
 
 
-# ============ 테스트 헬퍼 함수 ============
-
-
-async def clear_all_data() -> None:
-    """테스트용 헬퍼 함수로, 모든 데이터를 삭제합니다.
-
-    주의: 이 함수는 테스트 환경에서만 사용해야 합니다.
-    """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-            await cur.execute("TRUNCATE TABLE post_view_log")
-            await cur.execute("TRUNCATE TABLE post_like")
-            await cur.execute("TRUNCATE TABLE comment")
-            await cur.execute("TRUNCATE TABLE post")
-            await cur.execute("SET FOREIGN_KEY_CHECKS = 1")
-
-
-def _build_author_dict(user_id, nickname, profile_img) -> dict:
-    """작성자 정보 딕셔너리를 생성합니다.
-
-    Args:
-        user_id: 사용자 ID (탈퇴 시 None).
-        nickname: 닉네임 (탈퇴 시 None).
-        profile_img: 프로필 이미지 URL (없으면 기본 이미지).
-
-    Returns:
-        작성자 정보 딕셔너리.
-    """
-    return {
-        "user_id": user_id,
-        "nickname": nickname if nickname else "탈퇴한 사용자",
-        "profileImageUrl": profile_img or "/assets/profiles/default_profile.jpg",
-    }
-
-
 async def get_posts_with_details(offset: int = 0, limit: int = 10) -> list[dict]:
     """게시글 목록을 작성자 정보, 좋아요 수, 댓글 수와 함께 조회합니다.
 
@@ -327,7 +292,7 @@ async def get_posts_with_details(offset: int = 0, limit: int = 10) -> list[dict]
                     "views_count": row[4],
                     "created_at": row[5],
                     "updated_at": row[6],
-                    "author": _build_author_dict(row[7], row[8], row[9]),
+                    "author": build_author_dict(row[7], row[8], row[9]),
                     "likes_count": row[10],
                     "comments_count": row[11],
                 }
@@ -370,7 +335,7 @@ async def get_post_with_details(post_id: int) -> dict | None:
                 "views_count": row[4],
                 "created_at": row[5],
                 "updated_at": row[6],
-                "author": _build_author_dict(row[7], row[8], row[9]),
+                "author": build_author_dict(row[7], row[8], row[9]),
                 "likes_count": row[10],
             }
 
