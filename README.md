@@ -286,6 +286,16 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
+- 2026-02-04
+  - 코드 중복 제거
+    - `withdraw_user`/`cleanup_deleted_user` 공통 로직을 `_disconnect_and_anonymize_user`로 추출
+    - 모든 컨트롤러의 응답 딕셔너리를 `create_response` 헬퍼로 통일
+    - 사용자 직렬화 로직을 `serialize_user` 헬퍼로 추출
+    - `post_models.py`의 author 딕셔너리 구성을 `_build_author_dict`로 추출
+  - 버그 수정
+    - `get_optional_user`에서 만료된 세션을 DB에서 삭제하지 않던 문제 수정
+    - `get_optional_user`에서 탈퇴한 사용자의 세션을 clear하지 않던 문제 수정
+
 - 2026-02-02: 코드 리뷰 & 문서화
   - `bcrypt` 의존성 추가
   - 데이터베이스 포트를 허용된 오리진 목록에서 제거

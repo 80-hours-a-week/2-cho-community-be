@@ -8,6 +8,7 @@ from fastapi import HTTPException, Request, UploadFile, status
 from models import post_models
 from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
+from schemas.common import create_response
 from dependencies.request_context import get_request_timestamp
 from utils.formatters import format_datetime
 from utils.file_utils import save_upload_file
@@ -77,10 +78,10 @@ async def get_posts(
         if len(content) > 200:
             post["content"] = content[:200] + "..."
 
-    return {
-        "code": "POSTS_RETRIEVED",
-        "message": "게시글 목록 조회에 성공했습니다.",
-        "data": {
+    return create_response(
+        "POSTS_RETRIEVED",
+        "게시글 목록 조회에 성공했습니다.",
+        data={
             "posts": posts_data,
             "pagination": {
                 "offset": offset,
@@ -89,9 +90,8 @@ async def get_posts(
                 "has_more": has_more,
             },
         },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+        timestamp=timestamp,
+    )
 
 
 async def get_post(
@@ -154,16 +154,12 @@ async def get_post(
         comment["created_at"] = format_datetime(comment["created_at"])
         comment["updated_at"] = format_datetime(comment.get("updated_at"))
 
-    return {
-        "code": "POST_RETRIEVED",
-        "message": "게시글 조회에 성공했습니다.",
-        "data": {
-            "post": post_data,
-            "comments": comments_data,
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "POST_RETRIEVED",
+        "게시글 조회에 성공했습니다.",
+        data={"post": post_data, "comments": comments_data},
+        timestamp=timestamp,
+    )
 
 
 async def create_post(
@@ -190,15 +186,12 @@ async def create_post(
         image_url=post_data.image_url,
     )
 
-    return {
-        "code": "POST_CREATED",
-        "message": "게시글이 생성되었습니다.",
-        "data": {
-            "post_id": post.id,
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "POST_CREATED",
+        "게시글이 생성되었습니다.",
+        data={"post_id": post.id},
+        timestamp=timestamp,
+    )
 
 
 async def update_post(
@@ -269,17 +262,16 @@ async def update_post(
         image_url=updates.get("image_url"),
     )
 
-    return {
-        "code": "POST_UPDATED",
-        "message": "게시글이 수정되었습니다.",
-        "data": {
+    return create_response(
+        "POST_UPDATED",
+        "게시글이 수정되었습니다.",
+        data={
             "post_id": updated_post.id,
             "title": updated_post.title,
             "content": updated_post.content,
         },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+        timestamp=timestamp,
+    )
 
 
 async def delete_post(
@@ -325,13 +317,7 @@ async def delete_post(
 
     await post_models.delete_post(post_id)
 
-    return {
-        "code": "POST_DELETED",
-        "message": "게시글이 삭제되었습니다.",
-        "data": {},
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response("POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp)
 
 
 async def upload_image(
@@ -361,12 +347,9 @@ async def upload_image(
             e.detail["timestamp"] = timestamp
         raise e
 
-    return {
-        "code": "IMAGE_UPLOADED",
-        "message": "이미지가 업로드되었습니다.",
-        "data": {
-            "url": url,
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "IMAGE_UPLOADED",
+        "이미지가 업로드되었습니다.",
+        data={"url": url},
+        timestamp=timestamp,
+    )

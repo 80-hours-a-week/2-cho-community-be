@@ -115,10 +115,13 @@ async def get_optional_user(request: Request) -> User | None:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < now:
+        await user_models.delete_session(session_id)
+        request.session.clear()
         return None
 
     # 삭제된 사용자 확인
     if user.deleted_at:
+        request.session.clear()
         return None
 
     return user

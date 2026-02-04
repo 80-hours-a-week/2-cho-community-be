@@ -12,6 +12,7 @@ from schemas.user_schemas import (
     ChangePasswordRequest,
     WithdrawRequest,
 )
+from schemas.common import create_response, serialize_user
 from dependencies.request_context import get_request_timestamp
 from utils.password import hash_password, verify_password
 from utils.file_utils import save_upload_file
@@ -60,20 +61,12 @@ async def get_user(user_id: int, request: Request) -> dict:
             },
         )
 
-    return {
-        "code": "AUTH_SUCCESS",
-        "message": "사용자 조회에 성공했습니다.",
-        "data": {
-            "user": {
-                "user_id": user.id,
-                "email": user.email,
-                "nickname": user.nickname,
-                "profileImageUrl": user.profileImageUrl,
-            }
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "AUTH_SUCCESS",
+        "사용자 조회에 성공했습니다.",
+        data={"user": serialize_user(user)},
+        timestamp=timestamp,
+    )
 
 
 async def create_user(
@@ -166,13 +159,7 @@ async def create_user(
         logger.error(f"Unexpected error in create_user: {e}\n{traceback.format_exc()}")
         raise e
 
-    return {
-        "code": "SIGNUP_SUCCESS",
-        "message": "사용자 생성에 성공했습니다.",
-        "data": {},
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response("SIGNUP_SUCCESS", "사용자 생성에 성공했습니다.", timestamp=timestamp)
 
 
 async def get_my_info(current_user: User, request: Request) -> dict:
@@ -187,20 +174,12 @@ async def get_my_info(current_user: User, request: Request) -> dict:
     """
     timestamp = get_request_timestamp(request)
 
-    return {
-        "code": "AUTH_SUCCESS",
-        "message": "현재 로그인 중인 상태입니다.",
-        "data": {
-            "user": {
-                "user_id": current_user.id,
-                "email": current_user.email,
-                "nickname": current_user.nickname,
-                "profileImageUrl": current_user.profileImageUrl,
-            },
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "AUTH_SUCCESS",
+        "현재 로그인 중인 상태입니다.",
+        data={"user": serialize_user(current_user)},
+        timestamp=timestamp,
+    )
 
 
 async def get_user_info(user_id: int, current_user: User, request: Request) -> dict:
@@ -231,20 +210,12 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
             },
         )
 
-    return {
-        "code": "QUERY_SUCCESS",
-        "message": "유저 조회에 성공했습니다.",
-        "data": {
-            "user": {
-                "user_id": user.id,
-                "email": user.email,
-                "nickname": user.nickname,
-                "profileImageUrl": user.profileImageUrl,
-            },
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "QUERY_SUCCESS",
+        "유저 조회에 성공했습니다.",
+        data={"user": serialize_user(user)},
+        timestamp=timestamp,
+    )
 
 
 async def update_user(
@@ -298,20 +269,12 @@ async def update_user(
     if update_data.nickname is not None:
         request.session["nickname"] = update_data.nickname
 
-    return {
-        "code": "UPDATE_SUCCESS",
-        "message": "유저 정보 수정에 성공했습니다.",
-        "data": {
-            "user": {
-                "user_id": updated_user.id,
-                "email": updated_user.email,
-                "nickname": updated_user.nickname,
-                "profileImageUrl": updated_user.profileImageUrl,
-            }
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "UPDATE_SUCCESS",
+        "유저 정보 수정에 성공했습니다.",
+        data={"user": serialize_user(updated_user)},
+        timestamp=timestamp,
+    )
 
 
 async def change_password(
@@ -356,13 +319,7 @@ async def change_password(
     hashed_new_password = hash_password(password_data.new_password)
     await user_models.update_password(current_user.id, hashed_new_password)
 
-    return {
-        "code": "PASSWORD_CHANGE_SUCCESS",
-        "message": "비밀번호 변경에 성공했습니다.",
-        "data": {},
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response("PASSWORD_CHANGE_SUCCESS", "비밀번호 변경에 성공했습니다.", timestamp=timestamp)
 
 
 async def withdraw_user(
@@ -411,13 +368,7 @@ async def withdraw_user(
     # 세션 초기화 (로그아웃)
     request.session.clear()
 
-    return {
-        "code": "WITHDRAWAL_ACCEPTED",
-        "message": "탈퇴 신청이 접수되었습니다.",
-        "data": {},
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response("WITHDRAWAL_ACCEPTED", "탈퇴 신청이 접수되었습니다.", timestamp=timestamp)
 
 
 async def upload_profile_image(
@@ -447,12 +398,9 @@ async def upload_profile_image(
             e.detail["timestamp"] = timestamp
         raise e
 
-    return {
-        "code": "IMAGE_UPLOADED",
-        "message": "프로필 이미지가 업로드되었습니다.",
-        "data": {
-            "url": url,
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "IMAGE_UPLOADED",
+        "프로필 이미지가 업로드되었습니다.",
+        data={"url": url},
+        timestamp=timestamp,
+    )

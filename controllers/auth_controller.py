@@ -8,6 +8,7 @@ from fastapi import HTTPException, Request, status
 from models import user_models
 from models.user_models import User
 from schemas.auth_schemas import LoginRequest
+from schemas.common import create_response, serialize_user
 from dependencies.request_context import get_request_timestamp
 from utils.password import verify_password
 from core.config import settings
@@ -62,20 +63,12 @@ async def login(credentials: LoginRequest, request: Request) -> dict:
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.SESSION_EXPIRE_HOURS)
     await user_models.create_session(user.id, session_id, expires_at)
 
-    return {
-        "code": "LOGIN_SUCCESS",
-        "message": "로그인에 성공했습니다.",
-        "data": {
-            "user": {
-                "user_id": user.id,
-                "email": user.email,
-                "nickname": user.nickname,
-                "profileImageUrl": user.profileImageUrl,
-            },
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "LOGIN_SUCCESS",
+        "로그인에 성공했습니다.",
+        data={"user": serialize_user(user)},
+        timestamp=timestamp,
+    )
 
 
 async def logout(current_user: User, request: Request) -> dict:
@@ -97,13 +90,7 @@ async def logout(current_user: User, request: Request) -> dict:
 
     request.session.clear()
 
-    return {
-        "code": "LOGOUT_SUCCESS",
-        "message": "로그아웃에 성공했습니다.",
-        "data": {},
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response("LOGOUT_SUCCESS", "로그아웃에 성공했습니다.", timestamp=timestamp)
 
 
 async def get_my_info(current_user: User, request: Request) -> dict:
@@ -118,17 +105,9 @@ async def get_my_info(current_user: User, request: Request) -> dict:
     """
     timestamp = get_request_timestamp(request)
 
-    return {
-        "code": "AUTH_SUCCESS",
-        "message": "현재 로그인 중인 상태입니다.",
-        "data": {
-            "user": {
-                "user_id": current_user.id,
-                "email": current_user.email,
-                "nickname": current_user.nickname,
-                "profileImageUrl": current_user.profileImageUrl,
-            },
-        },
-        "errors": [],
-        "timestamp": timestamp,
-    }
+    return create_response(
+        "AUTH_SUCCESS",
+        "현재 로그인 중인 상태입니다.",
+        data={"user": serialize_user(current_user)},
+        timestamp=timestamp,
+    )

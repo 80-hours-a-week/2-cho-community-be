@@ -68,3 +68,20 @@ class UserData(BaseModel):
     email: str
     nickname: str
     profileImageUrl: str
+
+
+def serialize_user(user) -> dict[str, Any]:
+    """User 객체를 API 응답용 딕셔너리로 변환합니다.
+
+    Args:
+        user: User 데이터 객체 (id, email, nickname, profileImageUrl 속성 필요).
+
+    Returns:
+        사용자 정보 딕셔너리.
+    """
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "nickname": user.nickname,
+        "profileImageUrl": user.profileImageUrl,
+    }
