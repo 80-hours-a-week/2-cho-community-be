@@ -127,6 +127,8 @@ scripts/
 .agent/
 .gemini/
 .claude/
+CLAUDE.md
+GEMINI.md
 
 # ===========================
 # Secrets / Certificates
