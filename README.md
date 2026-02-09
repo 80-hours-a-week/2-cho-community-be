@@ -319,6 +319,21 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
+- 2026-02-09: CSRF Protection 구현
+  - Double Submit Cookie 패턴을 사용한 CSRF 방어 추가
+    - `middleware/csrf_protection.py`: 상태 변경 요청(POST/PUT/PATCH/DELETE)에 CSRF 토큰 검증
+    - 쿠키 토큰과 헤더 토큰 일치 여부 확인 (constant-time comparison)
+    - 로그인/회원가입 등 인증 전 엔드포인트는 검증 제외
+  - CORS 설정 업데이트: `X-CSRF-Token` 헤더 허용
+  - 테스트 인프라 개선
+    - `tests/test_csrf.py`: CSRF 보호 로직 검증 (9개 테스트 케이스)
+    - `tests/conftest.py`: CSRF 토큰 자동 포함 테스트 클라이언트 (CSRFAsyncClient)
+  - 전체 테스트 통과: 51개 (기존 42개 + CSRF 9개)
+  - P1 Quick Wins
+    - 메모리 누수 수정: `HeaderView.cleanup()` 메서드 추가 (이벤트 리스너 제거)
+    - 민감 정보 로깅 제거: `helpers.js::getImageUrl()` console.warn 삭제
+    - 중복 제출 방지: `CommentController::submitComment()` isSubmitting 플래그 추가
+
 - 2026-02-09: 코드 품질 & 보안 강화
   - 크리티컬 버그 수정
     - `models/post_models.py::update_post()`: rowcount 체크를 쿼리 실행 전에 하여 UPDATE가 절대 실행되지 않던 버그 수정

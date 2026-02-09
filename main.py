@@ -12,6 +12,7 @@ from routers.user_router import user_router
 from routers.post_router import post_router
 from routers.terms_router import terms_router
 from middleware import TimingMiddleware, LoggingMiddleware, RateLimitMiddleware
+from middleware.csrf_protection import CSRFProtectionMiddleware
 from middleware.exception_handler import (
     global_exception_handler,
     request_validation_exception_handler,
@@ -57,6 +58,9 @@ app.add_middleware(LoggingMiddleware)
 # RateLimitMiddleware: API 요청 속도 제한 (브루트포스 방지)
 app.add_middleware(RateLimitMiddleware)
 
+# CSRFProtectionMiddleware: CSRF 공격 방어 (Double Submit Cookie 패턴)
+app.add_middleware(CSRFProtectionMiddleware)
+
 # SessionMiddleware: 모든 요청과 응답에서 세션을 처리
 # 프로젝트 루트에 .env 파일이 있어야 하고 그 안에 SECRET_KEY="..."가 있어야 함
 app.add_middleware(
@@ -73,7 +77,7 @@ app.add_middleware(
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],  # CSRF 토큰 헤더 허용
 )
 
 # 라우터 추가
