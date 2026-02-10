@@ -38,7 +38,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Client (Browser)                        │
-│                    Vanilla JS SPA (Port 8080)                   │
+│                    Vanilla JS MPA (Port 8080)                   │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │ HTTP (JSON/FormData)
                                   │ credentials: include (Cookie)
