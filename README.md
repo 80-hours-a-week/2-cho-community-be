@@ -303,7 +303,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 - **JWT vs Session**: JWT는 stateless하여 확장성이 좋으나, 로그아웃 시 토큰 무효화가 복잡함. 이 프로젝트는 단일 서버 환경이므로 세션 기반 인증이 더 단순하고 적합하다고 판단.
 - **ORM vs Raw SQL**: SQLAlchemy 등 ORM 사용을 고려했으나, 학습 목적으로 raw SQL을 직접 작성하여 쿼리 최적화 경험을 쌓기로 결정.
-- **SPA Framework**: React, Vue 등 프레임워크 대신 Vanilla JS를 선택. 프레임워크 학습 비용 없이 JavaScript 기본기를 다지는 것이 목표.
+- **Vanilla JS**: React, Vue 등 프레임워크 대신 Vanilla JS를 선택. 프레임워크 학습 비용 없이 JavaScript 기본기를 다지는 것이 목표.
 - **이미지 저장소**: S3 등 외부 스토리지 대신 로컬 파일시스템 사용. 프로젝트 규모상 충분하며, 인프라 비용 절감.
 - **Soft Delete**: 물리적 삭제 대신 `deleted_at` 컬럼 사용. 데이터 복구 가능성 확보 및 FK 무결성 유지.
 
@@ -319,17 +319,66 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
-- 2026-02-05 (6차) - 코드 리팩토링
+- 2026-02-09: 코드 리뷰 기반 주요 이슈 수정
+  - 보안 관련 수정
+    - `main.py`: CSRF 미들웨어 순서 수정 (DoS 우회 방지)
+      - 변경 전: `LoggingMiddleware → RateLimitMiddleware → CSRFProtectionMiddleware → SessionMiddleware`
+      - 변경 후: `LoggingMiddleware → SessionMiddleware → CSRFProtectionMiddleware → RateLimitMiddleware`
+      - 공격자가 잘못된 CSRF 토큰으로 Rate Limit 우회하는 취약점 제거
+    - `middleware/csrf_protection.py`: CSRF 쿠키 보안 플래그 환경 변수화
+      - `secure=False` (하드코딩) → `secure=settings.HTTPS_ONLY` (환경 기반)
+      - 프로덕션 환경에서 HTTPS 강제, MITM 공격 방어
+  - 테스트 품질 개선
+    - `tests/test_transaction_race_conditions.py`: 빈 테스트 플레이스홀더 3개 제거
+      - 제거: `test_update_user_race_condition`, `test_update_post_race_condition`, `test_add_user_race_condition`
+      - 실제 검증 로직 없이 `pass`만 포함, 허위 통과 결과 제공
+  - 문서 정확성 개선
+    - `README.md`: 변경사항 설명 정확성 수정 (line 335-336)
+      - 이전: "rowcount 체크를 쿼리 실행 전에 하여 UPDATE가 절대 실행되지 않던 버그"
+      - 수정: "params 순서 오류 수정 (post_id를 params 끝에 추가)" + "transactional() 사용으로 UPDATE+SELECT 원자성 보장"
+  - 의존성 추가
+    - `cryptography>=46.0.0` 패키지 추가 (MySQL 8.0 `caching_sha2_password` 인증 지원)
+
+- 2026-02-09: CSRF Protection 구현
+  - Double Submit Cookie 패턴을 사용한 CSRF 방어 추가
+    - `middleware/csrf_protection.py`: 상태 변경 요청(POST/PUT/PATCH/DELETE)에 CSRF 토큰 검증
+    - 쿠키 토큰과 헤더 토큰 일치 여부 확인 (constant-time comparison)
+    - 로그인/회원가입 등 인증 전 엔드포인트는 검증 제외
+  - CORS 설정 업데이트: `X-CSRF-Token` 헤더 허용
+  - 테스트 인프라 개선
+    - `tests/test_csrf.py`: CSRF 보호 로직 검증 (9개 테스트 케이스)
+    - `tests/conftest.py`: CSRF 토큰 자동 포함 테스트 클라이언트 (CSRFAsyncClient)
+  - 전체 테스트 통과: 51개 (기존 42개 + CSRF 9개)
+
+- 2026-02-09: 코드 품질 & 보안 강화
+  - 크리티컬 버그 수정
+    - `models/post_models.py::update_post()`: params 순서 오류 수정 (post_id를 params 끝에 추가하도록 수정)
+    - `models/post_models.py::update_post()`: transactional() 사용으로 UPDATE+SELECT 원자성 보장
+    - `models/user_models.py::add_user()`, `update_user()`: transactional()을 connection처럼 사용하던 버그 수정
+    - `models/user_models.py::update_password()`: 트랜잭션 없이 UPDATE 후 다른 연결에서 SELECT하던 Phantom Read 가능성 수정
+  - 보안 강화
+    - SQL Injection 방어: 동적 UPDATE 쿼리에 whitelist 검증 추가 (ALLOWED_POST_COLUMNS, ALLOWED_USER_COLUMNS)
+    - 컬럼명을 f-string으로 삽입하는 패턴에 명시적 검증 로직 추가
+  - 코드 품질 개선
+    - `services/user_service.py`의 중복 함수 `_generate_anonymized_user_data()` 제거 (models에만 유지)
+  - 테스트 검증: 42개 전체 테스트 통과 확인 (커버리지 79.59%)
+
+- 2026-02-05: 코드 리팩토링
   - `services/user_service.py` 생성: 사용자 관련 비즈니스 로직 분리
   - `controllers/user_controller.py` 리팩토링: HTTP 요청/응답 처리만 담당하도록 변경
+  - 메모리 누수 방지 (LRU 메커니즘)
+  - IP 위조 방어 (프록시 검증, `ipaddress`)
+  - 트랜잭션 적용 (like, comment)
+  - DB 격리 수준 설정 (READ COMMITTED)
+  - 커넥션 풀 크기 증가 (5-50)
 
-- 2026-02-04 (5차) - 아키텍처 리팩토링
+- 2026-02-04: 아키텍처 리팩토링
   - Service Layer(서비스 계층) 도입
     - `services/post_service.py` 생성: 게시글 관련 비즈니스 로직 분리
     - `PostController` 리팩토링: HTTP 요청/응답 처리만 담당 (Thin Controller)
   - 코드 유지보수성 및 테스트 용이성 향상
 
-- 2026-02-04 (4차) - 테스트 인프라
+- 2026-02-04: 테스트 인프라
   - 단위 테스트 도입
     - `tests/test_rate_limiter.py`: Rate Limiter 로직 검증
     - `tests/test_auth_controller.py`: Auth Controller 로직 검증 (Mock 활용)
@@ -338,7 +387,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
   - 테스트 안정성 개선 (Test Isolation)
     - `conftest.py`의 `clear_all_data`에 `TRUNCATE user_session`, `user` 추가
 
-- 2026-02-04 (3차) - 보안 강화
+- 2026-02-04: 보안 강화
   - Rate Limiter 미들웨어 추가 (`middleware/rate_limiter.py`)
     - IP 기반 요청 속도 제한 (브루트포스 방지)
     - 로그인: 1분에 5회, 회원가입: 1분에 3회
@@ -351,7 +400,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
     - 에러 응답 헬퍼 함수 추가 (`utils/exceptions.py`)
     - `post_controller.py`에 에러 헬퍼 적용
 
-- 2026-02-04 (2차)
+- 2026-02-04
   - 버그 수정
     - `post_view_log` 테이블에 `UNIQUE KEY (user_id, post_id, view_date)` 누락으로 조회수가 매 방문마다 증가하던 버그 수정
     - `view_date` 컬럼을 VIRTUAL에서 STORED로 변경 (UNIQUE 인덱스 지원)
@@ -368,7 +417,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
     - `auth_controller`와 `user_models` 간의 순환 참조 의존성 제거 (session import 분리)
     - `user_controller` 로깅 표준화 (`traceback` 제거 → `logger.exception` 적용)
 
-- 2026-02-04 (1차)
+- 2026-02-04
   - 코드 중복 제거
     - `withdraw_user`/`cleanup_deleted_user` 공통 로직을 `_disconnect_and_anonymize_user`로 추출
     - 모든 컨트롤러의 응답 딕셔너리를 `create_response` 헬퍼로 통일

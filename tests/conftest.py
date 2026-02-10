@@ -12,6 +12,33 @@ from database.connection import get_connection, init_db, close_db
 from faker import Faker
 
 
+class CSRFAsyncClient(AsyncClient):
+    """CSRF 토큰을 자동으로 포함하는 AsyncClient 래퍼."""
+
+    async def request(self, method, url, **kwargs):
+        """요청 시 CSRF 토큰을 자동으로 헤더에 추가."""
+        # POST, PUT, PATCH, DELETE 요청에만 CSRF 토큰 추가
+        if method.upper() in ["POST", "PUT", "PATCH", "DELETE"]:
+            # 쿠키에서 CSRF 토큰 가져오기
+            csrf_token = self.cookies.get("csrf_token")
+            if csrf_token:
+                # 기존 헤더가 None이면 새 dict 생성
+                headers = kwargs.get("headers")
+                if headers is None:
+                    headers = {}
+                elif not isinstance(headers, dict):
+                    # 다른 타입(예: list of tuples)이면 dict로 변환
+                    headers = dict(headers)
+                else:
+                    # dict면 복사본 생성 (원본 수정 방지)
+                    headers = dict(headers)
+
+                headers["X-CSRF-Token"] = csrf_token
+                kwargs["headers"] = headers
+
+        return await super().request(method, url, **kwargs)
+
+
 async def clear_all_data() -> None:
     """테스트용 헬퍼: 모든 게시글 관련 데이터를 삭제합니다."""
     async with get_connection() as conn:
@@ -42,9 +69,11 @@ async def db():
 
 @pytest_asyncio.fixture
 async def client(db):
-    """API 테스트를 위한 Async Client"""
+    """API 테스트를 위한 CSRF 지원 Async Client"""
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with CSRFAsyncClient(transport=transport, base_url="http://test") as ac:
+        # GET 요청으로 CSRF 토큰 획득
+        await ac.get("/health")
         yield ac
 
 
