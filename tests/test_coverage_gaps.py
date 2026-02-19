@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi import status, HTTPException
 import pytest_asyncio
 
@@ -94,8 +94,8 @@ async def test_upload_profile_image_endpoint(client: AsyncClient, authorized_use
     cli, _, _ = authorized_user
     files = {"file": ("test.jpg", b"fake content", "image/jpeg")}
 
-    # Patch save_upload_file to return a fake URL, bypassing validation
-    with patch("controllers.user_controller.save_upload_file") as mock_save:
+    # Patch upload_to_s3 to return a fake URL, bypassing S3 validation
+    with patch("controllers.user_controller.upload_to_s3", new_callable=AsyncMock) as mock_save:
         mock_save.return_value = "/uploads/test.jpg"
 
         res = await cli.post("/v1/users/profile/image", files=files)
@@ -218,7 +218,7 @@ async def test_create_user_image_upload_fail_http(client: AsyncClient, user_payl
 
     files = {"profile_image": ("test.jpg", b"fake data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_upload_file") as mock_save:
+    with patch("controllers.user_controller.upload_to_s3", new_callable=AsyncMock) as mock_save:
         mock_save.side_effect = HTTPException(
             status_code=400, detail={"error": "too_large"}
         )
@@ -240,7 +240,7 @@ async def test_create_user_image_upload_fail_generic(client: AsyncClient, user_p
     """
     files = {"profile_image": ("test.jpg", b"fake data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_upload_file") as mock_save:
+    with patch("controllers.user_controller.upload_to_s3", new_callable=AsyncMock) as mock_save:
         mock_save.side_effect = Exception("S3 Error")
 
         data = {k: v for k, v in user_payload.items()}
@@ -260,7 +260,7 @@ async def test_upload_profile_image_fail(client: AsyncClient, authorized_user):
     cli, _, _ = authorized_user
     files = {"file": ("test.jpg", b"fake image data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_upload_file") as mock_save:
+    with patch("controllers.user_controller.upload_to_s3", new_callable=AsyncMock) as mock_save:
         # Simulate HTTPException (e.g. file too large)
         mock_save.side_effect = HTTPException(
             status_code=413, detail={"error": "file_too_large"}
