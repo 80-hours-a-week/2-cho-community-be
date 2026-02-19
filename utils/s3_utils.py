@@ -1,9 +1,12 @@
 """S3 파일 업로드 유틸리티.
 
-AWS S3에 이미지 파일을 업로드하고 공개 URL을 반환합니다.
+AWS S3에 이미지 파일을 업로드하고 URL을 반환합니다.
+CLOUDFRONT_DOMAIN이 설정된 경우 CloudFront CDN URL을 반환하고,
+그렇지 않으면 직접 S3 URL을 반환합니다 (로컬 개발 및 마이그레이션 전환기용).
 """
 
 import io
+import os
 import uuid
 
 import boto3
@@ -42,6 +45,49 @@ def get_s3_client():
     )
 
 
+def build_image_url(s3_key: str) -> str:
+    """S3 키로부터 이미지 접근 URL을 생성합니다.
+
+    CLOUDFRONT_DOMAIN이 설정된 경우 CloudFront URL을 반환하고,
+    그렇지 않으면 직접 S3 URL을 반환합니다 (로컬 개발 및 CloudFront 설정 전).
+
+    Args:
+        s3_key: S3 객체 키 (예: "profiles/uuid.jpg")
+
+    Returns:
+        이미지 공개 URL
+    """
+    if settings.CLOUDFRONT_DOMAIN:
+        domain = settings.CLOUDFRONT_DOMAIN.rstrip("/")
+        return f"https://{domain}/{s3_key}"
+    return f"https://{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+
+
+def extract_s3_key(image_url: str) -> str:
+    """이미지 URL에서 S3 키를 추출합니다.
+
+    CloudFront URL과 직접 S3 URL 모두 지원합니다.
+
+    Args:
+        image_url: CloudFront URL 또는 S3 직접 URL
+
+    Returns:
+        S3 객체 키 (예: "profiles/uuid.jpg")
+    """
+    # CloudFront URL: https://domain.cloudfront.net/profiles/uuid.jpg
+    if settings.CLOUDFRONT_DOMAIN and settings.CLOUDFRONT_DOMAIN in image_url:
+        return image_url.split(f"https://{settings.CLOUDFRONT_DOMAIN}/")[-1]
+
+    # 직접 S3 URL: https://bucket.s3.region.amazonaws.com/profiles/uuid.jpg
+    s3_suffix = f".s3.{settings.AWS_REGION}.amazonaws.com/"
+    if s3_suffix in image_url:
+        return image_url.split(s3_suffix)[-1]
+
+    # Fallback: 로컬 경로 (/assets/posts/image.jpg) 또는 알 수 없는 형식
+    # 앞의 슬래시를 제거하여 S3 키 형식으로 변환
+    return image_url.lstrip("/")
+
+
 def validate_image_signature(first_chunk: bytes) -> bool:
     """파일의 첫 번째 청크에서 매직 넘버를 검증합니다.
 
@@ -62,7 +108,7 @@ async def upload_to_s3(
     file: UploadFile,
     folder: str = "images",
 ) -> str:
-    """이미지 파일을 S3에 업로드하고 공개 URL을 반환합니다.
+    """이미지 파일을 S3에 업로드하고 URL을 반환합니다.
 
     파일 검증 과정:
     1. 확장자 검증
@@ -75,7 +121,7 @@ async def upload_to_s3(
         folder: S3 버킷 내 저장 폴더 (예: "images", "profiles", "posts").
 
     Returns:
-        S3 공개 URL (예: https://bucket-name.s3.region.amazonaws.com/images/uuid.jpg).
+        CloudFront URL (CLOUDFRONT_DOMAIN 설정 시) 또는 S3 직접 URL.
 
     Raises:
         HTTPException: 파일 형식이 잘못되었거나 크기가 초과된 경우.
@@ -87,7 +133,6 @@ async def upload_to_s3(
             detail={"error": "invalid_filename", "message": "파일명이 없습니다."},
         )
 
-    import os
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(
@@ -147,22 +192,32 @@ async def upload_to_s3(
             file_buffer.write(chunk)
 
         # 5. S3 업로드
-        file_buffer.seek(0)  # 버퍼 포인터를 처음으로 되돌림
+        if first_chunk:
+            # 루프가 한 번도 실행되지 않음 — 빈 파일
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "empty_file", "message": "파일이 비어 있습니다."},
+            )
+
+        file_buffer.seek(0)
         s3_client = get_s3_client()
+
+        # CLOUDFRONT_DOMAIN이 설정되기 전(전환 기간)에는 public-read ACL을 유지하여
+        # 직접 S3 URL로도 이미지에 접근 가능하도록 함.
+        # CloudFront OAC 설정 후에는 ACL 없이 버킷 정책으로만 접근 제어.
+        extra_args: dict = {"ContentType": file.content_type}
+        if not settings.CLOUDFRONT_DOMAIN:
+            extra_args["ACL"] = "public-read"
 
         s3_client.upload_fileobj(
             file_buffer,
             settings.AWS_S3_BUCKET_NAME,
             s3_key,
-            ExtraArgs={
-                "ContentType": file.content_type,
-                "ACL": "public-read",  # 공개 읽기 권한
-            },
+            ExtraArgs=extra_args,
         )
 
-        # 6. 공개 URL 생성
-        s3_url = f"https://{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
-        return s3_url
+        # 6. URL 반환 (CloudFront 또는 S3 직접)
+        return build_image_url(s3_key)
 
     except ClientError as e:
         raise HTTPException(
@@ -184,20 +239,19 @@ async def upload_to_s3(
         )
 
 
-async def delete_from_s3(s3_url: str) -> bool:
+async def delete_from_s3(image_url: str) -> bool:
     """S3에서 파일을 삭제합니다.
 
+    CloudFront URL과 직접 S3 URL 모두 지원합니다.
+
     Args:
-        s3_url: 삭제할 파일의 S3 URL.
+        image_url: 삭제할 파일의 URL (CloudFront URL 또는 S3 직접 URL).
 
     Returns:
         성공하면 True, 실패하면 False.
     """
     try:
-        # URL에서 S3 키 추출
-        # 예: https://bucket.s3.region.amazonaws.com/images/uuid.jpg → images/uuid.jpg
-        s3_key = s3_url.split(f".s3.{settings.AWS_REGION}.amazonaws.com/")[-1]
-
+        s3_key = extract_s3_key(image_url)
         s3_client = get_s3_client()
         s3_client.delete_object(
             Bucket=settings.AWS_S3_BUCKET_NAME,
