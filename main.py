@@ -85,7 +85,10 @@ app.add_middleware(
 
 # ProxyHeadersMiddleware: 리버스 프록시(nginx) 뒤에서 X-Forwarded-Proto 헤더를 처리
 # HTTPS 리다이렉트가 올바른 프로토콜을 사용하도록 함
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+# trusted_hosts: 신뢰할 프록시 IP만 지정 (settings.TRUSTED_PROXIES 또는 기본 localhost)
+# "*"는 모든 호스트를 신뢰하므로 보안상 위험 - IP 스푸핑 가능
+_proxy_trusted_hosts = list(settings.TRUSTED_PROXIES) if settings.TRUSTED_PROXIES else ["127.0.0.1", "::1"]
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_proxy_trusted_hosts)
 
 # 라우터 추가
 app.include_router(auth_router)

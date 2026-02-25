@@ -322,6 +322,37 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## changelog
 
+- 2026-02-25: 보안 강화 및 CI/CD 개선
+  - `ProxyHeadersMiddleware` 보안 수정
+    - `trusted_hosts="*"` → `settings.TRUSTED_PROXIES` 또는 기본값 `["127.0.0.1", "::1"]`
+    - IP 스푸핑 방지를 위해 신뢰할 프록시 IP만 명시적으로 허용
+    - `main.py:88-91`에서 설정 기반 동적 구성
+  - GitHub Actions CI 워크플로우 개선 (`.github/workflows/python-app.yml`)
+    - `test` job 추가: MySQL 서비스 컨테이너, ruff 린팅, mypy 타입 체크, pytest 실행
+    - Python 버전 수정: 3.10 → 3.11 (`pyproject.toml` 요구사항과 일치)
+    - 테스트 게이팅: `needs: test`로 테스트 통과 후에만 배포
+    - PR에서는 테스트만 실행: `if: github.event_name == 'push'` 조건 추가
+    - Docker 빌드 시 `--platform linux/amd64` 명시
+
+- 2026-02-24: Docker + EC2 배포로 전환
+  - 배포 아키텍처 변경: CloudFront + S3 + ELB → Docker Compose + 단일 EC2
+    - 이전: CloudFront (CDN) → S3 (정적 파일) + ELB → EC2 (API)
+    - 현재: EC2 (nginx + uvicorn + MySQL, 단일 인스턴스)
+  - Docker Compose 프로덕션 설정 (`docker-compose.prod.yml`)
+    - `frontend`: nginx:alpine 기반, 정적 파일 서빙 + 리버스 프록시
+    - `backend`: FastAPI + uvicorn, `/app/uploads` 볼륨 마운트
+    - `database`: MySQL 8.0, 데이터 영속성을 위한 볼륨 마운트
+    - 컨테이너 간 통신: Docker 내부 네트워크 (`my-community-network`)
+  - nginx 리버스 프록시 설정 (`2-cho-community-fe/nginx.conf`)
+    - HTTPS 강제 리다이렉트 (80 → 443)
+    - Let's Encrypt SSL 인증서 (`/etc/letsencrypt/live/my-community.shop/`)
+    - Clean URL 지원 (`/main` → `post_list.html`, `/login` → `user_login.html`)
+    - API 프록시: `/v1/*`, `/health` → `backend:8000`
+  - 프론트엔드 Dockerfile (`2-cho-community-fe/Dockerfile`)
+    - nginx:alpine 기반 경량 이미지
+    - 헬스체크 포함 (`wget --spider http://localhost:80/`)
+  - 장점: 단일 EC2로 비용 절감, Docker로 환경 일관성 보장, 배포 단순화 (`docker compose up -d`)
+
 - 2026-02-19: CloudFront + S3 배포 전환
   - 배포 아키텍처 변경: Single-Origin Nginx (EC2) → **CloudFront + S3 + ELB**
     - 정적 파일: S3 버킷 + CloudFront CDN 서빙
