@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from database.connection import init_db, close_db, get_connection, transactional
+from database.connection import init_db, close_db, transactional
 from utils.password import hash_password
 
 fake = Faker("ko_KR")
@@ -48,7 +48,7 @@ async def clear_existing_data():
         await cur.execute("TRUNCATE TABLE post_like")
         await cur.execute("TRUNCATE TABLE comment")
         await cur.execute("TRUNCATE TABLE post")
-        await cur.execute("TRUNCATE TABLE user_session")
+        await cur.execute("TRUNCATE TABLE refresh_token")
         await cur.execute("TRUNCATE TABLE image")
         await cur.execute("TRUNCATE TABLE user")
         await cur.execute("SET FOREIGN_KEY_CHECKS = 1")

@@ -3,7 +3,7 @@ AWS AI School 2기 3주차 과제: 커뮤니티 백엔드 서버
 
 ## 요약 (Summary)
 
-커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, 세션 기반 인증과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글, 좋아요, 회원 관리 기능을 제공합니다.
+커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글, 좋아요, 회원 관리 기능을 제공합니다.
 
 ## 배경 (Background)
 
@@ -35,111 +35,112 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ### 1. 시스템 아키텍처
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client (Browser)                        │
-│              Vanilla JS MPA (정적 파일: HTML/CSS/JS)              │
-│         개발: npm serve (8080) | 프로덕션: CloudFront + S3          │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │ HTTP (JSON/FormData)
-                                  │ credentials: include (Cookie)
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                      FastAPI Backend (Port 8000)                             │
-│  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Routers  │→ │Controllers │→ │ Services │→ │  Models  │→ │ aiomysql Pool│  │
-│  └──────────┘  └────────────┘  └──────────┘  └──────────┘  └──────────────┘  │
-│                                                                              │
-│  Middleware: CORS → Session → Logging → Timing                               │
-└─────────────────────────────────┬────────────────────────────────────────────┘
-                                  │ Async Connection Pool
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        MySQL Database                                        │
-│   Tables: user, user_session, post, comment, post_like, image, post_view_log │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Client["Client (Browser)"]
+        FE["Vanilla JS MPA<br/>정적 파일: HTML/CSS/JS<br/>개발: npm serve :8080 | 프로덕션: Docker + nginx"]
+    end
+
+    Client -->|"HTTP (JSON/FormData)<br/>Bearer Token + HttpOnly Cookie"| Backend
+
+    subgraph Backend["FastAPI Backend (Port 8000)"]
+        direction LR
+        Routers --> Controllers --> Services --> Models --> Pool["aiomysql Pool"]
+    end
+
+    note["Middleware: CORS → Logging → Timing → RateLimit"]
+
+    Backend -->|"Async Connection Pool"| DB
+
+    subgraph DB["MySQL Database"]
+        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log"]
+    end
 ```
 
 ### 2. 데이터베이스 설계
 
 #### ERD
 
-```text
-┌──────────────────┐       ┌──────────────────┐
-│      user        │       │   user_session   │
-├──────────────────┤       ├──────────────────┤
-│ id (PK)          │───┐   │ id (PK)          │
-│ email (UNIQUE)   │   │   │ user_id (FK)     │←─┐
-│ password_hash    │   │   │ session_id       │  │
-│ nickname (UNIQUE)│   │   │ expires_at       │  │
-│ profile_image    │   │   │ created_at       │  │
-│ deleted_at       │   │   └──────────────────┘  │
-│ created_at       │   │                         │
-└──────────────────┘   └─────────────────────────┘
-         │
-         │ 1:N
-         ▼
-┌──────────────────┐       ┌──────────────────┐
-│      post        │       │     comment      │
-├──────────────────┤       ├──────────────────┤
-│ id (PK)          │───┐   │ id (PK)          │
-│ author_id (FK)   │   │   │ post_id (FK)     │←─┐
-│ title            │   │   │ author_id (FK)   │  │
-│ content          │   │   │ content          │  │
-│ image_url        │   │   │ deleted_at       │  │
-│ view_count       │   │   │ created_at       │  │
-│ deleted_at       │   │   └──────────────────┘  │
-│ created_at       │   │                         │
-└──────────────────┘   └─────────────────────────┘
-         │
-         │ 1:N
-         ▼
-┌──────────────────┐
-│    post_like     │
-├──────────────────┤
-│ id (PK)          │
-│ post_id (FK)     │
-│ user_id (FK)     │
-│ created_at       │
-│ UNIQUE(post_id,  │
-│        user_id)  │
-└──────────────────┘
-```
+```mermaid
+erDiagram
+    user ||--o{ refresh_token : "has tokens"
+    user ||--o{ post : "creates"
+    user ||--o{ comment : "writes"
+    user ||--o{ post_like : "likes"
+    user ||--o{ image : "uploads"
+    user ||--o{ post_view_log : "views"
+    post ||--o{ comment : "has"
+    post ||--o{ post_like : "receives"
+    post ||--o{ post_view_log : "tracks"
 
-#### Image Table
-```text
-┌──────────────────┐
-│      image       │
-├──────────────────┤
-│ id (PK)          │
-│ image_url        │
-│ type (ENUM)      │
-│ uploader_id (FK) │
-│ uploaded_at      │
-└──────────────────┘
-```
+    user {
+        int id PK
+        varchar email UK
+        varchar password_hash
+        varchar nickname UK
+        varchar profile_image
+        datetime deleted_at
+        datetime created_at
+    }
 
-#### Post View Log Table (for Unique Views)
-```text
-┌──────────────────┐
-│  post_view_log   │
-├──────────────────┤
-│ id (PK)          │
-│ user_id (FK)     │
-│ post_id (FK)     │
-│ view_date        │
-│ created_at       │
-│ UNIQUE(user_id,  │
-│  post_id, date)  │
-└──────────────────┘
+    refresh_token {
+        int id PK
+        int user_id FK
+        varchar token_hash UK
+        datetime expires_at
+        datetime created_at
+    }
+
+    post {
+        int id PK
+        int author_id FK
+        varchar title
+        text content
+        varchar image_url
+        int view_count
+        datetime deleted_at
+        datetime created_at
+    }
+
+    comment {
+        int id PK
+        int post_id FK
+        int author_id FK
+        text content
+        datetime deleted_at
+        datetime created_at
+    }
+
+    post_like {
+        int id PK
+        int post_id FK
+        int user_id FK
+        datetime created_at
+    }
+
+    image {
+        int id PK
+        varchar image_url
+        enum type
+        int uploader_id FK
+        datetime uploaded_at
+    }
+
+    post_view_log {
+        int id PK
+        int user_id FK
+        int post_id FK
+        date view_date
+        datetime created_at
+    }
 ```
 
 #### 주요 설계 결정
 
 - **Soft Delete**: `user`, `post`, `comment` 테이블에 `deleted_at` 컬럼 사용. 물리적 삭제 대신 논리적 삭제로 데이터 보존.
-- **Session 기반 인증**: JWT 대신 서버 사이드 세션 사용. `user_session` 테이블에 세션 정보 저장, 24시간 만료.
+- **JWT 기반 인증**: Access Token(30분, HS256) + Refresh Token(7일, opaque random). Access Token은 프론트엔드 in-memory 저장, Refresh Token은 HttpOnly 쿠키로 전달하고 SHA-256 해시로 DB 저장. JWT payload에는 `sub`(user_id)만 포함하여 PII 노출 방지. 토큰 회전(rotation)으로 Refresh Token 탈취 시 자동 무효화.
 - **인덱스 전략**:
-  - `idx_user_session_session_id`: 매 요청마다 세션 조회
+  - `idx_refresh_token_hash`: Refresh Token 해시 조회
   - `idx_post_created_deleted`: 최신순 게시글 목록 조회
   - `idx_comment_post_deleted`: 게시글별 댓글 목록 조회
 
@@ -149,8 +150,9 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
-| POST | `/v1/auth/session` | 로그인 | X |
-| DELETE | `/v1/auth/session` | 로그아웃 | O |
+| POST | `/v1/auth/session` | 로그인 (Access Token + Refresh Token 발급) | X |
+| DELETE | `/v1/auth/session` | 로그아웃 (Refresh Token 무효화) | O |
+| POST | `/v1/auth/token/refresh` | 토큰 갱신 (Refresh Token → 새 Access Token) | X (쿠키) |
 | GET | `/v1/auth/me` | 현재 사용자 정보 | O |
 
 #### 사용자 API (`/v1/users`)
@@ -199,7 +201,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 | HTTP Status | 설명 |
 | ----------- | ---- |
 | 400 | 잘못된 요청 (유효성 검사 실패) |
-| 401 | 인증 필요 (세션 만료/미로그인) |
+| 401 | 인증 필요 (토큰 만료/미로그인) |
 | 403 | 권한 없음 (타인의 게시글 수정 시도 등) |
 | 404 | 리소스 없음 |
 | 409 | 충돌 (이메일/닉네임 중복) |
@@ -207,34 +209,43 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ### 4. 인증 흐름
 
-```text
-┌────────┐                    ┌────────┐                    ┌────────┐
-│ Client │                    │ Server │                    │  MySQL │
-└────┬───┘                    └────┬───┘                    └────┬───┘
-     │                             │                             │
-     │  POST /v1/auth/session      │                             │
-     │  {email, password}          │                             │
-     │────────────────────────────>│                             │
-     │                             │  SELECT user WHERE email    │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │                             │  bcrypt.verify(password)    │
-     │                             │                             │
-     │                             │  INSERT user_session        │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │  Set-Cookie: session_id     │                             │
-     │<────────────────────────────│                             │
-     │                             │                             │
-     │  GET /v1/posts (with cookie)│                             │
-     │────────────────────────────>│                             │
-     │                             │  SELECT session, user       │
-     │                             │  WHERE session_id AND       │
-     │                             │  expires_at > NOW()         │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │  200 OK + posts data        │                             │
-     │<────────────────────────────│                             │
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server as FastAPI Server
+    participant MySQL
+
+    rect rgb(240, 248, 255)
+        Note over Client,MySQL: 로그인 절차
+        Client->>Server: POST /v1/auth/session<br/>{email, password}
+        Server->>MySQL: SELECT user WHERE email
+        MySQL-->>Server: user data
+        Server->>Server: bcrypt.verify(password)
+        Server->>Server: JWT Access Token 생성 (30분)
+        Server->>Server: Refresh Token 생성 (opaque random)
+        Server->>MySQL: INSERT refresh_token (SHA-256 hash)
+        MySQL-->>Server: token stored
+        Server-->>Client: {access_token} + Set-Cookie: refresh_token (HttpOnly)
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Client,MySQL: 인증된 요청
+        Client->>Server: GET /v1/posts<br/>Authorization: Bearer {access_token}
+        Server->>Server: JWT 디코딩 + 검증 (stateless)
+        Server->>MySQL: SELECT user WHERE id = sub
+        MySQL-->>Server: user data
+        Server-->>Client: 200 OK + posts data
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Client,MySQL: 토큰 갱신 (Access Token 만료 시)
+        Client->>Server: POST /v1/auth/token/refresh<br/>Cookie: refresh_token
+        Server->>MySQL: SELECT refresh_token WHERE hash
+        MySQL-->>Server: token record
+        Server->>Server: 새 Access Token + Refresh Token 생성
+        Server->>MySQL: DELETE old + INSERT new (atomic rotation)
+        Server-->>Client: {new_access_token} + Set-Cookie: new_refresh_token
+    end
 ```
 
 ### 5. 프론트엔드 아키텍처
@@ -281,7 +292,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 - **정적 메서드**: 모든 클래스가 static 메서드만 사용
 - **IntersectionObserver**: 무한 스크롤 구현
-- **Custom Event**: `auth:session-expired` 이벤트로 401 처리
+- **Custom Event**: `auth:session-expired` 이벤트로 401 처리 (silent refresh 실패 시 발생)
 - **XSS 방지**: `escapeHtml()` 유틸리티로 사용자 입력 이스케이프
 
 ### 6. 보안 고려사항
@@ -289,7 +300,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 | 항목 | 구현 방식 |
 | ---- | --------- |
 | 비밀번호 해싱 | bcrypt (cost factor 기본값) |
-| 세션 관리 | HTTP-Only Cookie, 24시간 만료 |
+| JWT 인증 | Access Token(30분, in-memory) + Refresh Token(7일, HttpOnly Cookie, SHA-256 해시 DB 저장) |
 | CORS | 허용 출처 명시적 설정 (localhost:8080) |
 | SQL Injection | Parameterized queries (aiomysql) |
 | XSS | 프론트엔드에서 escapeHtml() 적용 |
@@ -302,10 +313,10 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ## 이외 고려 사항들 (Other Considerations)
 
-- **JWT vs Session**: JWT는 stateless하여 확장성이 좋으나, 로그아웃 시 토큰 무효화가 복잡함. 이 프로젝트는 단일 서버 환경이므로 세션 기반 인증이 더 단순하고 적합하다고 판단.
+- **JWT 인증**: Access Token(HS256, 30분) + Refresh Token(opaque random, 7일) 이중 토큰 전략 사용. Access Token은 프론트엔드 in-memory(JS 변수)에 저장하여 XSS 노출 최소화, Refresh Token은 HttpOnly 쿠키로 전달하고 SHA-256 해시로 DB에 저장. 토큰 회전(rotation)을 통해 Refresh Token 탈취 시 자동 무효화. CSRF 미들웨어는 제거됨 (Bearer 토큰이 CSRF 방어 역할).
 - **ORM vs Raw SQL**: SQLAlchemy 등 ORM 사용을 고려했으나, 학습 목적으로 raw SQL을 직접 작성하여 쿼리 최적화 경험을 쌓기로 결정.
 - **Vanilla JS**: React, Vue 등 프레임워크 대신 Vanilla JS를 선택. 프레임워크 학습 비용 없이 JavaScript 기본기를 다지는 것이 목표.
-- **이미지 저장소**: 초기에는 로컬 파일시스템을 사용했으나, CloudFront+S3 배포로 전환하면서 이미지도 S3에 저장하고 CloudFront URL로 서빙. `utils/s3_utils.py`에서 `CLOUDFRONT_DOMAIN` 환경변수로 URL 빌드.
+- **이미지 저장소**: Docker 환경에서는 `/app/uploads` 볼륨에 저장하고 nginx가 직접 서빙. 로컬 개발 시에도 로컬 파일시스템 사용.
 - **Soft Delete**: 물리적 삭제 대신 `deleted_at` 컬럼 사용. 데이터 복구 가능성 확보 및 FK 무결성 유지.
 
 ## 마일스톤 (Milestones)
@@ -321,6 +332,66 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 ## 최근 변경사항 (Recent Changes)
 
 ## changelog
+
+- 2026-02-25: JWT payload 최소화 + 코드 리뷰 수정
+  - JWT payload에서 PII 제거: `email`, `nickname`, `role` 클레임 삭제, `sub`(user_id)만 유지
+  - 파일명 변경: `session_models.py` → `token_models.py`
+  - 변수명 개선: `_ALGORITHM` → `_JWT_ALGORITHM`, `DUMMY_HASH` → `_TIMING_ATTACK_DUMMY_HASH` 등
+  - 주석 정리: 중복 주석 제거, 영어 → 한국어, 잘못된 주석 수정
+
+- 2026-02-25: JWT 인증으로 전환 (세션 기반 → JWT)
+  - 인증 방식 변경: 서버 사이드 세션 → JWT (Access Token 30분 + Refresh Token 7일)
+    - Access Token: HS256 JWT, 프론트엔드 in-memory 저장 (XSS 최소화)
+    - Refresh Token: opaque random string, HttpOnly 쿠키, SHA-256 해시로 DB 저장
+    - 토큰 회전(rotation): 갱신 시 기존 Refresh Token 삭제 + 새 토큰 발급 (원자적 트랜잭션)
+  - DB 스키마 변경: `user_session` 테이블 → `refresh_token` 테이블
+  - 새 엔드포인트: `POST /v1/auth/token/refresh` (토큰 갱신)
+  - CSRF 미들웨어 제거: Bearer 토큰이 CSRF 방어 역할 수행
+  - SessionMiddleware 제거: JWT는 stateless, 서버 사이드 세션 불필요
+  - 프론트엔드 변경:
+    - `ApiService.js`: Bearer 토큰 관리, silent refresh, thundering herd 보호
+    - `AuthModel.js`: 페이지 새로고침 시 HttpOnly 쿠키로 silent refresh
+  - 의존성 변경: `itsdangerous` → `PyJWT`
+  - 만료 토큰 자동 정리: `_periodic_token_cleanup()` 백그라운드 작업 (1시간 간격, `main.py` lifespan)
+  - 테스트 업데이트: 59개 전체 통과
+
+- 2026-02-25: 보안 강화, CI/CD 개선, 코드 품질 향상
+  - `ProxyHeadersMiddleware` 보안 수정
+    - `trusted_hosts="*"` → `settings.TRUSTED_PROXIES` 또는 기본값 `["127.0.0.1", "::1"]`
+    - IP 스푸핑 방지를 위해 신뢰할 프록시 IP만 명시적으로 허용
+    - `main.py:88-91`에서 설정 기반 동적 구성
+  - GitHub Actions CI 워크플로우 개선 (`.github/workflows/python-app.yml`)
+    - `test` job 추가: MySQL 서비스 컨테이너, ruff 린팅, mypy 타입 체크, pytest 실행
+    - Python 버전 수정: 3.10 → 3.11 (`pyproject.toml` 요구사항과 일치)
+    - 테스트 게이팅: `needs: test`로 테스트 통과 후에만 배포
+    - PR에서는 테스트만 실행: `if: github.event_name == 'push'` 조건 추가
+    - Docker 빌드 시 `--platform linux/amd64` 명시
+    - `.py`, `pyproject.toml`, `Dockerfile`, `schema.sql` 등 코드 변경 시에만 CI/CD 실행
+    - README, 문서 변경 시 불필요한 Docker 빌드/ECR 푸시 방지
+  - 코드 품질 개선 (ruff/mypy CI 통과)
+    - 13개 미사용 import 제거 (`seed_data.py`, `user_service.py`, `test_*.py`)
+    - `__init__.py` 추가: `utils/`, `database/`, `tests/` (mypy 패키지 인식)
+    - `pyproject.toml`에 `[tool.mypy]` 설정 추가 (pydantic 플러그인, ignore_missing_imports)
+    - 타입 에러 수정: `assert` 문으로 None 체크, `# type: ignore` 주석 추가
+
+- 2026-02-24: Docker + EC2 배포로 전환
+  - 배포 아키텍처 변경: CloudFront + S3 + ELB → Docker Compose + 단일 EC2
+    - 이전: CloudFront (CDN) → S3 (정적 파일) + ELB → EC2 (API)
+    - 현재: EC2 (nginx + uvicorn + MySQL, 단일 인스턴스)
+  - Docker Compose 프로덕션 설정 (`docker-compose.prod.yml`)
+    - `frontend`: nginx:alpine 기반, 정적 파일 서빙 + 리버스 프록시
+    - `backend`: FastAPI + uvicorn, `/app/uploads` 볼륨 마운트
+    - `database`: MySQL 9.6, 데이터 영속성을 위한 볼륨 마운트
+    - 컨테이너 간 통신: Docker 내부 네트워크 (`my-community-network`)
+  - nginx 리버스 프록시 설정 (`2-cho-community-fe/nginx.conf`)
+    - HTTPS 강제 리다이렉트 (80 → 443)
+    - Let's Encrypt SSL 인증서 (`/etc/letsencrypt/live/my-community.shop/`)
+    - Clean URL 지원 (`/main` → `post_list.html`, `/login` → `user_login.html`)
+    - API 프록시: `/v1/*`, `/health` → `backend:8000`
+  - 프론트엔드 Dockerfile (`2-cho-community-fe/Dockerfile`)
+    - nginx:alpine 기반 경량 이미지
+    - 헬스체크 포함 (`wget --spider http://localhost:80/`)
+  - 장점: 단일 EC2로 비용 절감, Docker로 환경 일관성 보장, 배포 단순화 (`docker compose up -d`)
 
 - 2026-02-19: CloudFront + S3 배포 전환
   - 배포 아키텍처 변경: Single-Origin Nginx (EC2) → **CloudFront + S3 + ELB**
@@ -512,6 +583,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
   - 엔드포인트 조정
   - CORS 설정
   - core 모듈을 추가하여 설정 객체 분리
+
 - 2026-01-19: 게시글 관련 API 구현 완료, API 문서화 시작
   - 게시글 목록 조회: `GET /v1/posts` 엔드포인트 추가
     - 페이지네이션 및 최신순 정렬 기능 구현

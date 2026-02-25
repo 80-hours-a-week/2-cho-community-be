@@ -124,17 +124,15 @@ async def update_user(
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
+    # profileImageUrl은 str | None으로 변환됨
+    profile_image_url: str | None = update_data.profileImageUrl  # type: ignore[assignment]
     updated_user = await UserService.update_user(
         user_id=current_user.id,
         nickname=update_data.nickname,
-        profile_image_url=update_data.profileImageUrl,
+        profile_image_url=profile_image_url,
         current_user=current_user,
         timestamp=timestamp,
     )
-
-    # 세션 정보 업데이트 (닉네임 변경 시)
-    if update_data.nickname is not None:
-        request.session["nickname"] = update_data.nickname
 
     return create_response(
         "UPDATE_SUCCESS",
@@ -177,9 +175,6 @@ async def withdraw_user(
         current_user=current_user,
         timestamp=timestamp,
     )
-
-    # 세션 초기화 (로그아웃)
-    request.session.clear()
 
     return create_response(
         "WITHDRAWAL_ACCEPTED", "탈퇴 신청이 접수되었습니다.", timestamp=timestamp

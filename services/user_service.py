@@ -1,9 +1,7 @@
 """user_service: 사용자 관련 비즈니스 로직을 처리하는 서비스."""
 
-import time
-import uuid
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 from models import user_models
 from models.user_models import User
 from schemas.user_schemas import CreateUserRequest
@@ -132,5 +130,5 @@ class UserService:
             raise bad_request_error("invalid_password", timestamp)
 
         # 3. 탈퇴 처리 (익명화 등은 모델의 withdraw_user 위임)
-        # models.withdraw_user는 트랜잭션 내에서 연결 끊기, 세션 삭제, 익명화를 수행함
+        # models.withdraw_user는 트랜잭션 내에서 연결 끊기, 리프레시 토큰 삭제, 익명화를 수행함
         await user_models.withdraw_user(user_id)
