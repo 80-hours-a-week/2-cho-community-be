@@ -3,9 +3,23 @@ name: Build and Push FastAPI to AWS ECR
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'Dockerfile'
+      - 'database/schema.sql'
+      - '.github/workflows/python-app.yml'
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'Dockerfile'
+      - 'database/schema.sql'
+      - '.github/workflows/python-app.yml'
+  workflow_dispatch:  # 수동 실행은 항상 가능
 
 jobs:
   test:

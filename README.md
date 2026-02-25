@@ -330,6 +330,8 @@ sequenceDiagram
     - 테스트 게이팅: `needs: test`로 테스트 통과 후에만 배포
     - PR에서는 테스트만 실행: `if: github.event_name == 'push'` 조건 추가
     - Docker 빌드 시 `--platform linux/amd64` 명시
+    - `.py`, `pyproject.toml`, `Dockerfile`, `schema.sql` 등 코드 변경 시에만 CI/CD 실행
+    - README, 문서 변경 시 불필요한 Docker 빌드/ECR 푸시 방지
   - 코드 품질 개선 (ruff/mypy CI 통과)
     - 13개 미사용 import 제거 (`seed_data.py`, `user_service.py`, `test_*.py`)
     - `__init__.py` 추가: `utils/`, `database/`, `tests/` (mypy 패키지 인식)
