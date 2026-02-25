@@ -35,103 +35,104 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ### 1. 시스템 아키텍처
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                         Client (Browser)                        │
-│              Vanilla JS MPA (정적 파일: HTML/CSS/JS)              │
-│         개발: npm serve (8080) | 프로덕션: CloudFront + S3          │
-└─────────────────────────────────┬───────────────────────────────┘
-                                  │ HTTP (JSON/FormData)
-                                  │ credentials: include (Cookie)
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                      FastAPI Backend (Port 8000)                             │
-│  ┌──────────┐  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Routers  │→ │Controllers │→ │ Services │→ │  Models  │→ │ aiomysql Pool│  │
-│  └──────────┘  └────────────┘  └──────────┘  └──────────┘  └──────────────┘  │
-│                                                                              │
-│  Middleware: CORS → Session → Logging → Timing                               │
-└─────────────────────────────────┬────────────────────────────────────────────┘
-                                  │ Async Connection Pool
-                                  ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        MySQL Database                                        │
-│   Tables: user, user_session, post, comment, post_like, image, post_view_log │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Client["Client (Browser)"]
+        FE["Vanilla JS MPA<br/>정적 파일: HTML/CSS/JS<br/>개발: npm serve :8080 | 프로덕션: CloudFront + S3"]
+    end
+
+    Client -->|"HTTP (JSON/FormData)<br/>credentials: include (Cookie)"| Backend
+
+    subgraph Backend["FastAPI Backend (Port 8000)"]
+        direction LR
+        Routers --> Controllers --> Services --> Models --> Pool["aiomysql Pool"]
+    end
+
+    note["Middleware: CORS → Session → Logging → Timing"]
+
+    Backend -->|"Async Connection Pool"| DB
+
+    subgraph DB["MySQL Database"]
+        Tables["user, user_session, post, comment,<br/>post_like, image, post_view_log"]
+    end
 ```
 
 ### 2. 데이터베이스 설계
 
 #### ERD
 
-```text
-┌──────────────────┐       ┌──────────────────┐
-│      user        │       │   user_session   │
-├──────────────────┤       ├──────────────────┤
-│ id (PK)          │───┐   │ id (PK)          │
-│ email (UNIQUE)   │   │   │ user_id (FK)     │←─┐
-│ password_hash    │   │   │ session_id       │  │
-│ nickname (UNIQUE)│   │   │ expires_at       │  │
-│ profile_image    │   │   │ created_at       │  │
-│ deleted_at       │   │   └──────────────────┘  │
-│ created_at       │   │                         │
-└──────────────────┘   └─────────────────────────┘
-         │
-         │ 1:N
-         ▼
-┌──────────────────┐       ┌──────────────────┐
-│      post        │       │     comment      │
-├──────────────────┤       ├──────────────────┤
-│ id (PK)          │───┐   │ id (PK)          │
-│ author_id (FK)   │   │   │ post_id (FK)     │←─┐
-│ title            │   │   │ author_id (FK)   │  │
-│ content          │   │   │ content          │  │
-│ image_url        │   │   │ deleted_at       │  │
-│ view_count       │   │   │ created_at       │  │
-│ deleted_at       │   │   └──────────────────┘  │
-│ created_at       │   │                         │
-└──────────────────┘   └─────────────────────────┘
-         │
-         │ 1:N
-         ▼
-┌──────────────────┐
-│    post_like     │
-├──────────────────┤
-│ id (PK)          │
-│ post_id (FK)     │
-│ user_id (FK)     │
-│ created_at       │
-│ UNIQUE(post_id,  │
-│        user_id)  │
-└──────────────────┘
-```
+```mermaid
+erDiagram
+    user ||--o{ user_session : "has sessions"
+    user ||--o{ post : "creates"
+    user ||--o{ comment : "writes"
+    user ||--o{ post_like : "likes"
+    user ||--o{ image : "uploads"
+    user ||--o{ post_view_log : "views"
+    post ||--o{ comment : "has"
+    post ||--o{ post_like : "receives"
+    post ||--o{ post_view_log : "tracks"
 
-#### Image Table
-```text
-┌──────────────────┐
-│      image       │
-├──────────────────┤
-│ id (PK)          │
-│ image_url        │
-│ type (ENUM)      │
-│ uploader_id (FK) │
-│ uploaded_at      │
-└──────────────────┘
-```
+    user {
+        int id PK
+        varchar email UK
+        varchar password_hash
+        varchar nickname UK
+        varchar profile_image
+        datetime deleted_at
+        datetime created_at
+    }
 
-#### Post View Log Table (for Unique Views)
-```text
-┌──────────────────┐
-│  post_view_log   │
-├──────────────────┤
-│ id (PK)          │
-│ user_id (FK)     │
-│ post_id (FK)     │
-│ view_date        │
-│ created_at       │
-│ UNIQUE(user_id,  │
-│  post_id, date)  │
-└──────────────────┘
+    user_session {
+        int id PK
+        int user_id FK
+        varchar session_id
+        datetime expires_at
+        datetime created_at
+    }
+
+    post {
+        int id PK
+        int author_id FK
+        varchar title
+        text content
+        varchar image_url
+        int view_count
+        datetime deleted_at
+        datetime created_at
+    }
+
+    comment {
+        int id PK
+        int post_id FK
+        int author_id FK
+        text content
+        datetime deleted_at
+        datetime created_at
+    }
+
+    post_like {
+        int id PK
+        int post_id FK
+        int user_id FK
+        datetime created_at
+    }
+
+    image {
+        int id PK
+        varchar image_url
+        enum type
+        int uploader_id FK
+        datetime uploaded_at
+    }
+
+    post_view_log {
+        int id PK
+        int user_id FK
+        int post_id FK
+        date view_date
+        datetime created_at
+    }
 ```
 
 #### 주요 설계 결정
@@ -207,34 +208,30 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 ### 4. 인증 흐름
 
-```text
-┌────────┐                    ┌────────┐                    ┌────────┐
-│ Client │                    │ Server │                    │  MySQL │
-└────┬───┘                    └────┬───┘                    └────┬───┘
-     │                             │                             │
-     │  POST /v1/auth/session      │                             │
-     │  {email, password}          │                             │
-     │────────────────────────────>│                             │
-     │                             │  SELECT user WHERE email    │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │                             │  bcrypt.verify(password)    │
-     │                             │                             │
-     │                             │  INSERT user_session        │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │  Set-Cookie: session_id     │                             │
-     │<────────────────────────────│                             │
-     │                             │                             │
-     │  GET /v1/posts (with cookie)│                             │
-     │────────────────────────────>│                             │
-     │                             │  SELECT session, user       │
-     │                             │  WHERE session_id AND       │
-     │                             │  expires_at > NOW()         │
-     │                             │────────────────────────────>│
-     │                             │<────────────────────────────│
-     │  200 OK + posts data        │                             │
-     │<────────────────────────────│                             │
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server as FastAPI Server
+    participant MySQL
+
+    rect rgb(240, 248, 255)
+        Note over Client,MySQL: 로그인 절차
+        Client->>Server: POST /v1/auth/session<br/>{email, password}
+        Server->>MySQL: SELECT user WHERE email
+        MySQL-->>Server: user data
+        Server->>Server: bcrypt.verify(password)
+        Server->>MySQL: INSERT user_session
+        MySQL-->>Server: session created
+        Server-->>Client: Set-Cookie: session_id
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Client,MySQL: 인증된 요청
+        Client->>Server: GET /v1/posts (with cookie)
+        Server->>MySQL: SELECT session, user<br/>WHERE session_id AND expires_at > NOW()
+        MySQL-->>Server: session + user data
+        Server-->>Client: 200 OK + posts data
+    end
 ```
 
 ### 5. 프론트엔드 아키텍처
@@ -346,7 +343,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
   - Docker Compose 프로덕션 설정 (`docker-compose.prod.yml`)
     - `frontend`: nginx:alpine 기반, 정적 파일 서빙 + 리버스 프록시
     - `backend`: FastAPI + uvicorn, `/app/uploads` 볼륨 마운트
-    - `database`: MySQL 8.0, 데이터 영속성을 위한 볼륨 마운트
+    - `database`: MySQL 9.6, 데이터 영속성을 위한 볼륨 마운트
     - 컨테이너 간 통신: Docker 내부 네트워크 (`my-community-network`)
   - nginx 리버스 프록시 설정 (`2-cho-community-fe/nginx.conf`)
     - HTTPS 강제 리다이렉트 (80 → 443)

@@ -1,7 +1,7 @@
 # Database Docker Image
 # Build: docker build -t my-community-db:latest ./2-cho-community-be/database
 
-FROM mysql:8.0
+FROM mysql:9.6
 
 ARG APP_VERSION=1.0.0
 LABEL maintainer="corpseonthemission@icloud.com"
