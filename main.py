@@ -22,6 +22,7 @@ from database.connection import init_db, close_db
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from mangum import mangum
 import os
 
 
@@ -114,7 +115,8 @@ async def health_check():
 
 
 # 전역 예외 핸들러 등록
-
-
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore[arg-type]
+
+# AWS Lambda가 호출할 핸들러 정의
+handler = Mangum(app)
