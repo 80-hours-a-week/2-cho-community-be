@@ -11,9 +11,9 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 
 # Upload directory (configurable via environment variable)
-UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/mnt/uploads"))
 
-# Allowed image extensions and MIME types (same as s3_utils.py)
+# 허용된 이미지 확장자 및 MIME 타입
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_MIME_TYPES = {
     "image/jpeg",
@@ -151,8 +151,13 @@ def delete_file(url_path: str) -> bool:
     if not url_path.startswith("/uploads/"):
         return False
 
-    relative_path = url_path.replace("/uploads/", "")
-    file_path = UPLOAD_DIR / relative_path
+    relative_path = url_path.replace("/uploads/", "", 1)
+    file_path = (UPLOAD_DIR / relative_path).resolve()
+
+    # Path Traversal 방지: 해석된 경로가 UPLOAD_DIR 내부인지 검증 (Python 3.9+)
+    upload_dir_resolved = UPLOAD_DIR.resolve()
+    if not file_path.is_relative_to(upload_dir_resolved):
+        return False
 
     if file_path.exists():
         file_path.unlink()

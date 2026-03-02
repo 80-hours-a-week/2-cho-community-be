@@ -5,6 +5,8 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from schemas._image_validators import validate_upload_image_url, validate_upload_image_url_list
+
 
 class CreatePostRequest(BaseModel):
     """게시글 생성 요청 모델.
@@ -13,11 +15,14 @@ class CreatePostRequest(BaseModel):
         title: 게시글 제목 (3~100자).
         content: 게시글 내용 (1~10000자).
         image_url: 첨부 이미지 URL (선택, 최대 1개).
+        category_id: 카테고리 ID (필수).
     """
 
     title: str = Field(..., min_length=3, max_length=100)
     content: str = Field(..., min_length=1, max_length=10000)
     image_url: str | None = None
+    image_urls: list[str] | None = None
+    category_id: int = Field(..., ge=1)
 
     @field_validator("title")
     @classmethod
@@ -60,25 +65,14 @@ class CreatePostRequest(BaseModel):
     @field_validator("image_url")
     @classmethod
     def validate_image_url(cls, v: str | None) -> str | None:
-        """이미지 URL 형식을 검증합니다.
+        """이미지 URL 형식을 검증합니다."""
+        return validate_upload_image_url(v)
 
-        Args:
-            v: 입력된 이미지 URL.
-
-        Returns:
-            검증된 이미지 URL 또는 None.
-
-        Raises:
-            ValueError: 허용되지 않은 이미지 형식인 경우.
-        """
-        if v is None:
-            return None
-        allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-        if not any(v.lower().endswith(ext) for ext in allowed_extensions):
-            raise ValueError(
-                "이미지는 .jpg, .jpeg, .png, .gif, .webp 형식만 허용됩니다."
-            )
-        return v
+    @field_validator("image_urls")
+    @classmethod
+    def validate_image_urls(cls, v: list[str] | None) -> list[str] | None:
+        """이미지 URL 리스트를 검증합니다."""
+        return validate_upload_image_url_list(v)
 
 
 class UpdatePostRequest(BaseModel):
@@ -92,6 +86,20 @@ class UpdatePostRequest(BaseModel):
     title: str | None = Field(None, min_length=3, max_length=100)
     content: str | None = Field(None, min_length=1, max_length=10000)
     image_url: str | None = None
+    image_urls: list[str] | None = None
+    category_id: int | None = Field(None, ge=1)
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, v: str | None) -> str | None:
+        """이미지 URL 형식을 검증합니다."""
+        return validate_upload_image_url(v)
+
+    @field_validator("image_urls")
+    @classmethod
+    def validate_image_urls(cls, v: list[str] | None) -> list[str] | None:
+        """이미지 URL 리스트를 검증합니다."""
+        return validate_upload_image_url_list(v)
 
     @field_validator("title")
     @classmethod

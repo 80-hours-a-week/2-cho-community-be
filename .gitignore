@@ -40,6 +40,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+coverage_html/
 .tox/
 .nox/
 .coverage
@@ -117,8 +118,11 @@ server_error.log
 # Project Specific
 # ===========================
 
-# Uploaded assets (user-generated content)
-assets/
+# Uploaded assets (user-generated content, not static defaults)
+assets/*
+!assets/profiles/
+assets/profiles/*
+!assets/profiles/default_profile.jpg
 
 # Local scripts
 scripts/

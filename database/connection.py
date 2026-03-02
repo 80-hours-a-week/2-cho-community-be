@@ -33,8 +33,8 @@ async def init_db() -> None:
             db=settings.DB_NAME,
             charset="utf8mb4",
             autocommit=True,
-            minsize=5,  # 최소 5개 연결 유지 (Cold Start 방지)
-            maxsize=50,  # 최대 50개 (트래픽에 따라 조정)
+            minsize=5,
+            maxsize=50,
             connect_timeout=5,  # 5초 연결 타임아웃
             # 트랜잭션 격리 수준 설정
             init_command="SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED",

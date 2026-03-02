@@ -1,14 +1,13 @@
 from fastapi import HTTPException, Request, UploadFile, status
+from models.post_models import ALLOWED_SORT_OPTIONS
+from models import post_models
 from models.user_models import User
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from schemas.common import create_response
 from dependencies.request_context import get_request_timestamp
-from utils.storage import save_uploaded_file
-from core.config import settings
+from utils.upload import save_file
+from utils.exceptions import not_found_error
 from services.post_service import PostService
-
-# 이미지 저장 경로 (설정에서 로드)
-IMAGE_UPLOAD_DIR = settings.IMAGE_UPLOAD_DIR
 
 
 # ============ 게시글 관련 핸들러 ============
@@ -18,6 +17,11 @@ async def get_posts(
     offset: int,
     limit: int,
     request: Request,
+    search: str | None = None,
+    sort: str = "latest",
+    author_id: int | None = None,
+    category_id: int | None = None,
+    current_user: User | None = None,
 ) -> dict:
     """
     게시글 목록을 조회합니다.
@@ -26,6 +30,9 @@ async def get_posts(
         offset (int): 조회 시작 위치 (0 이상)
         limit (int): 조회할 게시글 수 (1~100)
         request (Request): FastAPI Request 객체
+        search (str | None): 검색어 (제목+내용). None이면 전체 조회.
+        sort (str): 정렬 옵션 (latest, likes, views, comments).
+        author_id (int | None): 작성자 ID로 필터링. None이면 전체 조회.
 
     Returns:
         dict: 게시글 목록과 페이지네이션 정보를 포함한 응답 딕셔너리
@@ -55,8 +62,20 @@ async def get_posts(
             },
         )
 
+    # 공백만 있는 검색어는 None으로 정규화
+    if search is not None:
+        search = search.strip() or None
+
+    # 유효하지 않은 정렬 옵션은 기본값으로 대체
+    if sort not in ALLOWED_SORT_OPTIONS:
+        sort = "latest"
+
     # Service Layer 호출
-    posts_data, total_count, has_more = await PostService.get_posts(offset, limit)
+    posts_data, total_count, has_more = await PostService.get_posts(
+        offset, limit, search=search, sort=sort,
+        author_id=author_id, category_id=category_id,
+        current_user=current_user,
+    )
 
     return create_response(
         "POSTS_RETRIEVED",
@@ -132,7 +151,9 @@ async def create_post(
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
-    post_id = await PostService.create_post(current_user.id, post_data)
+    post_id = await PostService.create_post(
+        current_user.id, post_data, is_admin=current_user.is_admin,
+    )
 
     return create_response(
         "POST_CREATED",
@@ -173,6 +194,8 @@ async def update_post(
         post_data.content,
         post_data.image_url,
         timestamp,
+        category_id=post_data.category_id,
+        image_urls=post_data.image_urls,
     )
 
     return create_response(
@@ -205,7 +228,9 @@ async def delete_post(
     timestamp = get_request_timestamp(request)
 
     # Service Layer 호출
-    await PostService.delete_post(post_id, current_user.id, timestamp)
+    await PostService.delete_post(
+        post_id, current_user.id, timestamp, is_admin=current_user.is_admin,
+    )
 
     return create_response(
         "POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp
@@ -214,7 +239,7 @@ async def delete_post(
 
 async def upload_image(
     file: UploadFile,
-    current_user: User,
+    _current_user: User,
     request: Request,
 ) -> dict:
     """
@@ -234,7 +259,7 @@ async def upload_image(
     timestamp = get_request_timestamp(request)
 
     try:
-        url = await save_uploaded_file(file, folder="posts")
+        url = await save_file(file, folder="posts")
     except HTTPException as e:
         if isinstance(e.detail, dict):
             e.detail["timestamp"] = timestamp
@@ -245,4 +270,42 @@ async def upload_image(
         "이미지가 업로드되었습니다.",
         data={"url": url},
         timestamp=timestamp,
+    )
+
+
+async def pin_post(
+    post_id: int,
+    _current_user: User,
+    request: Request,
+) -> dict:
+    """게시글을 고정합니다 (관리자 전용)."""
+    timestamp = get_request_timestamp(request)
+
+    post = await post_models.get_post_by_id(post_id)
+    if not post:
+        raise not_found_error("post", timestamp)
+
+    await post_models.pin_post(post_id)
+
+    return create_response(
+        "POST_PINNED", "게시글이 고정되었습니다.", timestamp=timestamp
+    )
+
+
+async def unpin_post(
+    post_id: int,
+    _current_user: User,
+    request: Request,
+) -> dict:
+    """게시글 고정을 해제합니다 (관리자 전용)."""
+    timestamp = get_request_timestamp(request)
+
+    post = await post_models.get_post_by_id(post_id)
+    if not post:
+        raise not_found_error("post", timestamp)
+
+    await post_models.unpin_post(post_id)
+
+    return create_response(
+        "POST_UNPINNED", "게시글 고정이 해제되었습니다.", timestamp=timestamp
     )

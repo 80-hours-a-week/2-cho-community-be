@@ -23,7 +23,7 @@ async def test_get_user_unauthenticated(client: AsyncClient, authorized_user):
     res = await unauth_client.get(f"/v1/users/{user_id}")
     assert res.status_code == 200
     data = res.json()
-    assert data["code"] == "AUTH_SUCCESS"
+    assert data["code"] == "QUERY_SUCCESS"
     assert "user" in data["data"]
 
 
@@ -71,7 +71,9 @@ async def test_get_user_authenticated_other(client: AsyncClient, authorized_user
     res_get = await cli.get(f"/v1/users/{other_id}")
     assert res_get.status_code == 200
     assert res_get.json()["code"] == "QUERY_SUCCESS"
-    assert res_get.json()["data"]["user"]["email"] == user2_email
+    # 타 사용자 프로필에서는 이메일 비공개
+    assert "email" not in res_get.json()["data"]["user"]
+    assert "nickname" in res_get.json()["data"]["user"]
 
 
 @pytest.mark.asyncio
@@ -94,7 +96,7 @@ async def test_upload_profile_image_endpoint(client: AsyncClient, authorized_use
     files = {"file": ("test.jpg", b"fake content", "image/jpeg")}
 
     # Patch save_uploaded_file to return a fake URL, bypassing storage validation
-    with patch("controllers.user_controller.save_uploaded_file", new_callable=AsyncMock) as mock_save:
+    with patch("controllers.user_controller.save_file", new_callable=AsyncMock) as mock_save:
         mock_save.return_value = "/uploads/test.jpg"
 
         res = await cli.post("/v1/users/profile/image", files=files)
@@ -205,7 +207,7 @@ async def test_create_user_image_upload_fail_http(client: AsyncClient, user_payl
 
     files = {"profile_image": ("test.jpg", b"fake data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_uploaded_file", new_callable=AsyncMock) as mock_save:
+    with patch("controllers.user_controller.save_file", new_callable=AsyncMock) as mock_save:
         mock_save.side_effect = HTTPException(
             status_code=400, detail={"error": "too_large"}
         )
@@ -227,7 +229,7 @@ async def test_create_user_image_upload_fail_generic(client: AsyncClient, user_p
     """
     files = {"profile_image": ("test.jpg", b"fake data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_uploaded_file", new_callable=AsyncMock) as mock_save:
+    with patch("controllers.user_controller.save_file", new_callable=AsyncMock) as mock_save:
         mock_save.side_effect = Exception("Storage Error")
 
         data = {k: v for k, v in user_payload.items()}
@@ -247,7 +249,7 @@ async def test_upload_profile_image_fail(client: AsyncClient, authorized_user):
     cli, _, _ = authorized_user
     files = {"file": ("test.jpg", b"fake image data", "image/jpeg")}
 
-    with patch("controllers.user_controller.save_uploaded_file", new_callable=AsyncMock) as mock_save:
+    with patch("controllers.user_controller.save_file", new_callable=AsyncMock) as mock_save:
         # Simulate HTTPException (e.g. file too large)
         mock_save.side_effect = HTTPException(
             status_code=413, detail={"error": "file_too_large"}
@@ -308,4 +310,6 @@ async def test_get_other_user_info(client: AsyncClient, authorized_user, fake):
     # Now use `cli` (authenticated as User 1) to view User 2
     res_get = await cli.get(f"/v1/users/{other_id}")
     assert res_get.status_code == 200
-    assert res_get.json()["data"]["user"]["email"] == user2_email
+    # 타 사용자 프로필에서는 이메일 비공개
+    assert "email" not in res_get.json()["data"]["user"]
+    assert "nickname" in res_get.json()["data"]["user"]

@@ -1,9 +1,9 @@
 # 2-cho-community-be
-AWS AI School 2기 3주차 과제: 커뮤니티 백엔드 서버
+AWS AI School 2기 과제: 커뮤니티 백엔드 서버
 
 ## 요약 (Summary)
 
-커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글, 좋아요, 회원 관리 기능을 제공합니다.
+커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글(대댓글 포함), 좋아요, 북마크, 댓글 좋아요, 검색/정렬(인기순 포함), 다중 이미지, 사용자 차단, 공유, 이메일 인증, 알림, 내 활동 조회, 사용자 프로필 기능을 제공합니다.
 
 ## 배경 (Background)
 
@@ -15,21 +15,27 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 
 - 회원가입, 로그인, 로그아웃, 회원 탈퇴 기능을 제공한다.
 - 게시글 작성, 조회, 수정, 삭제(CRUD) 기능을 제공한다.
-- 댓글 작성, 수정, 삭제 기능을 제공한다.
+- 댓글 작성, 수정, 삭제 기능을 제공한다. (1단계 대댓글 지원)
+- 게시글 검색(제목+내용 FULLTEXT) 및 정렬(최신순/좋아요순/조회수순/댓글순) 기능을 제공한다.
 - 게시글 좋아요/좋아요 취소 기능을 제공한다.
+- 게시글 북마크 기능을 제공한다. (북마크 추가/해제, 내 북마크 목록 조회)
+- 댓글 좋아요 기능을 제공한다. (댓글별 좋아요 수 표시, is_liked 상태)
+- 게시글 공유 기능을 제공한다. (Web Share API 또는 클립보드 복사)
+- 사용자 차단 기능을 제공한다. (차단된 사용자의 게시글/댓글 숨김)
+- 다중 이미지 업로드 기능을 제공한다. (게시글당 최대 5개, 기존 단일 이미지 하위 호환)
+- 인기 게시글(Hot) 정렬을 제공한다. (좋아요/댓글/조회수 가중치 + 시간 감쇠)
 - 프로필 이미지 및 닉네임 수정 기능을 제공한다.
 - 무한 스크롤 기반의 게시글 목록을 제공한다.
 - 모바일/데스크탑 반응형 UI를 제공한다.
+- 이메일 인증 기능을 제공한다. (회원가입 후 인증 메일 발송, 인증 완료 전 글쓰기 제한)
+- 알림 시스템을 제공한다. (좋아요/댓글 시 알림 생성, 읽음 처리, 폴링 기반)
+- 내 활동 조회 기능을 제공한다. (내가 쓴 글/댓글, 좋아요한 글, 북마크한 글)
+- 타 사용자 프로필 조회 기능을 제공한다. (공개 프로필, 닉네임 클릭으로 이동, 차단 기능)
 
 ## 목표가 아닌 것 (Non-Goals)
 
-- 실시간 알림 기능 (WebSocket)
-- 게시글 검색 기능
-- 대댓글(nested comments) 기능
+- 실시간 알림 기능 (WebSocket) — 현재는 30초 폴링 방식 사용
 - 소셜 로그인 (OAuth)
-- 이메일 인증 및 비밀번호 찾기
-- 관리자 대시보드
-- 게시글 카테고리 또는 태그 기능
 
 ## 계획 (Plan)
 
@@ -38,7 +44,7 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 ```mermaid
 flowchart TD
     subgraph Client["Client (Browser)"]
-        FE["Vanilla JS MPA<br/>정적 파일: HTML/CSS/JS<br/>개발: npm serve :8080 | 프로덕션: Docker + nginx"]
+        FE["Vanilla JS MPA<br/>정적 파일: HTML/CSS/JS<br/>개발: npm serve :8080 | 프로덕션: S3 + CloudFront"]
     end
 
     Client -->|"HTTP (JSON/FormData)<br/>Bearer Token + HttpOnly Cookie"| Backend
@@ -53,7 +59,7 @@ flowchart TD
     Backend -->|"Async Connection Pool"| DB
 
     subgraph DB["MySQL Database"]
-        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log"]
+        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log,<br/>email_verification, notification"]
     end
 ```
 
@@ -69,9 +75,20 @@ erDiagram
     user ||--o{ post_like : "likes"
     user ||--o{ image : "uploads"
     user ||--o{ post_view_log : "views"
+    user ||--o{ email_verification : "verifies"
+    user ||--o{ notification : "receives"
+    user ||--o{ report : "reports"
+    user ||--o{ post_bookmark : "bookmarks"
+    user ||--o{ comment_like : "likes comments"
+    user ||--o{ user_block : "blocks"
     post ||--o{ comment : "has"
+    comment ||--o{ comment : "replies (1-level)"
     post ||--o{ post_like : "receives"
+    post ||--o{ post_bookmark : "bookmarked"
+    post ||--o{ post_image : "has images"
     post ||--o{ post_view_log : "tracks"
+    comment ||--o{ comment_like : "receives likes"
+    category ||--o{ post : "classifies"
 
     user {
         int id PK
@@ -79,6 +96,8 @@ erDiagram
         varchar password_hash
         varchar nickname UK
         varchar profile_image
+        enum role "user, admin"
+        boolean email_verified "default FALSE"
         datetime deleted_at
         datetime created_at
     }
@@ -94,11 +113,35 @@ erDiagram
     post {
         int id PK
         int author_id FK
+        int category_id FK
         varchar title
         text content
         varchar image_url
+        boolean is_pinned "default FALSE"
         int view_count
         datetime deleted_at
+        datetime created_at
+    }
+
+    category {
+        int id PK
+        varchar name UK
+        varchar slug UK
+        varchar description
+        int sort_order
+        datetime created_at
+    }
+
+    report {
+        int id PK
+        int reporter_id FK
+        enum target_type "post, comment"
+        int target_id
+        enum reason "spam, abuse, inappropriate, other"
+        text description
+        enum status "pending, resolved, dismissed"
+        int resolved_by FK
+        datetime resolved_at
         datetime created_at
     }
 
@@ -106,6 +149,7 @@ erDiagram
         int id PK
         int post_id FK
         int author_id FK
+        int parent_id FK "self-ref (1단계 대댓글)"
         text content
         datetime deleted_at
         datetime created_at
@@ -133,6 +177,54 @@ erDiagram
         date view_date
         datetime created_at
     }
+
+    email_verification {
+        int id PK
+        int user_id FK
+        varchar token UK
+        datetime expires_at
+        boolean used "default FALSE"
+        datetime created_at
+    }
+
+    notification {
+        int id PK
+        int user_id FK "수신자"
+        int actor_id FK "발신자"
+        int post_id FK
+        enum type "like, comment, reply"
+        boolean is_read "default FALSE"
+        datetime created_at
+    }
+
+    post_bookmark {
+        int id PK
+        int user_id FK
+        int post_id FK
+        datetime created_at
+    }
+
+    comment_like {
+        int id PK
+        int user_id FK
+        int comment_id FK
+        datetime created_at
+    }
+
+    user_block {
+        int id PK
+        int blocker_id FK
+        int blocked_id FK
+        datetime created_at
+    }
+
+    post_image {
+        int id PK
+        int post_id FK
+        varchar image_url
+        tinyint sort_order
+        datetime created_at
+    }
 ```
 
 #### 주요 설계 결정
@@ -143,6 +235,17 @@ erDiagram
   - `idx_refresh_token_hash`: Refresh Token 해시 조회
   - `idx_post_created_deleted`: 최신순 게시글 목록 조회
   - `idx_comment_post_deleted`: 게시글별 댓글 목록 조회
+  - `ft_post_title_content`: FULLTEXT INDEX (ngram parser) — 제목+내용 한국어 검색
+  - `idx_notification_user_read`: 사용자별 읽지 않은 알림 조회
+  - `idx_email_verification_token`: 이메일 인증 토큰 조회
+  - `idx_post_category`: 카테고리별 게시글 목록 조회
+  - `idx_post_pinned`: 고정 게시글 우선 정렬
+  - `idx_report_status`: 신고 상태별 목록 조회
+  - `idx_report_target`: 대상별 신고 조회
+  - `idx_post_bookmark_post_id`, `idx_post_bookmark_user`: 북마크 조회
+  - `idx_comment_like_comment_id`, `idx_comment_like_user`: 댓글 좋아요 조회
+  - `idx_user_block_blocker`, `idx_user_block_blocked`: 차단 조회
+  - `idx_post_image_post`: 게시글 이미지 정렬 조회
 
 ### 3. API 설계
 
@@ -154,35 +257,74 @@ erDiagram
 | DELETE | `/v1/auth/session` | 로그아웃 (Refresh Token 무효화) | O |
 | POST | `/v1/auth/token/refresh` | 토큰 갱신 (Refresh Token → 새 Access Token) | X (쿠키) |
 | GET | `/v1/auth/me` | 현재 사용자 정보 | O |
+| POST | `/v1/auth/verify-email` | 이메일 인증 토큰 검증 | X |
+| POST | `/v1/auth/resend-verification` | 인증 메일 재발송 | O |
 
 #### 사용자 API (`/v1/users`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
 | POST | `/v1/users` | 회원가입 | X |
+| POST | `/v1/users/find-email` | 이메일 찾기 (닉네임 → 마스킹 이메일) | X |
+| POST | `/v1/users/reset-password` | 비밀번호 재설정 (이메일 → 임시 비밀번호 발송) | X |
 | GET | `/v1/users/{user_id}` | 사용자 프로필 조회 | X |
 | PATCH | `/v1/users/me` | 프로필 수정 (본인) | O |
 | DELETE | `/v1/users/me` | 회원 탈퇴 (본인) | O |
 | PUT | `/v1/users/me/password` | 비밀번호 변경 | O |
 | POST | `/v1/users/profile/image` | 프로필 이미지 업로드 | O |
+| GET | `/v1/users/me/posts` | 내가 쓴 글 목록 | O |
+| GET | `/v1/users/me/comments` | 내가 쓴 댓글 목록 | O |
+| GET | `/v1/users/me/likes` | 좋아요한 글 목록 | O |
+| GET | `/v1/users/me/bookmarks` | 북마크한 글 목록 | O |
+| GET | `/v1/users/me/blocks` | 차단한 사용자 목록 | O |
+| POST | `/v1/users/{user_id}/block` | 사용자 차단 | O (이메일 인증) |
+| DELETE | `/v1/users/{user_id}/block` | 사용자 차단 해제 | O (이메일 인증) |
+
+#### 알림 API (`/v1/notifications`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/notifications` | 알림 목록 조회 (페이지네이션) | O |
+| GET | `/v1/notifications/unread-count` | 읽지 않은 알림 수 | O |
+| PATCH | `/v1/notifications/{id}/read` | 개별 알림 읽음 처리 | O |
+| PATCH | `/v1/notifications/read-all` | 전체 알림 읽음 처리 | O |
+| DELETE | `/v1/notifications/{id}` | 알림 삭제 | O |
 
 #### 게시글 API (`/v1/posts`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
-| GET | `/v1/posts` | 게시글 목록 (페이지네이션) | X |
-| POST | `/v1/posts` | 게시글 작성 | O |
+| GET | `/v1/posts` | 게시글 목록 (페이지네이션, `?search=`, `?sort=latest\|likes\|views\|comments\|hot`, `?category_id=`) | X |
+| POST | `/v1/posts` | 게시글 작성 (`category_id` 필수) | O (이메일 인증) |
 | GET | `/v1/posts/{post_id}` | 게시글 상세 조회 | X |
 | PATCH | `/v1/posts/{post_id}` | 게시글 수정 | O (작성자) |
-| DELETE | `/v1/posts/{post_id}` | 게시글 삭제 | O (작성자) |
+| DELETE | `/v1/posts/{post_id}` | 게시글 삭제 | O (작성자/관리자) |
+| PATCH | `/v1/posts/{post_id}/pin` | 게시글 고정 | O (관리자) |
+| DELETE | `/v1/posts/{post_id}/pin` | 게시글 고정 해제 | O (관리자) |
 | POST | `/v1/posts/{post_id}/likes` | 좋아요 | O |
 | DELETE | `/v1/posts/{post_id}/likes` | 좋아요 취소 | O |
-| POST | `/v1/posts/{post_id}/comments` | 댓글 작성 | O |
+| POST | `/v1/posts/{post_id}/bookmark` | 북마크 추가 | O (이메일 인증) |
+| DELETE | `/v1/posts/{post_id}/bookmark` | 북마크 해제 | O (이메일 인증) |
+| POST | `/v1/posts/{post_id}/comments/{comment_id}/like` | 댓글 좋아요 | O (이메일 인증) |
+| DELETE | `/v1/posts/{post_id}/comments/{comment_id}/like` | 댓글 좋아요 취소 | O (이메일 인증) |
+| POST | `/v1/posts/{post_id}/comments` | 댓글 작성 (대댓글: `parent_id` 지원) | O |
 | PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
-| POST | `/v1/posts/{post_id}/comments` | 댓글 작성 | O |
-| PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
-| DELETE | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 삭제 | O (작성자) |
+| DELETE | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 삭제 | O (작성자/관리자) |
 | POST | `/v1/posts/image` | 게시글 이미지 업로드 | O |
+
+#### 카테고리 API (`/v1/categories`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/categories` | 카테고리 목록 조회 | X |
+
+#### 신고 API (`/v1/reports`, `/v1/admin/reports`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| POST | `/v1/reports` | 신고 생성 | O (이메일 인증) |
+| GET | `/v1/admin/reports` | 신고 목록 조회 (`?status=pending\|resolved\|dismissed`) | O (관리자) |
+| PATCH | `/v1/admin/reports/{report_id}` | 신고 처리 (resolved/dismissed) | O (관리자) |
 
 #### 응답 형식
 
@@ -192,7 +334,7 @@ erDiagram
   "message": "성공",
   "data": { },
   "errors": null,
-  "timestamp": "2024-01-01T00:00:00Z"
+  "timestamp": "2026-01-01T00:00:00Z"
 }
 ```
 
@@ -254,15 +396,20 @@ sequenceDiagram
 
 ```text
 2-cho-community-fe/
-├── html/                    # 8개 정적 HTML 페이지
+├── html/                    # 13개 정적 HTML 페이지
 │   ├── post_list.html       # 메인 피드
 │   ├── post_detail.html     # 게시글 상세
 │   ├── post_write.html      # 게시글 작성
 │   ├── post_edit.html       # 게시글 수정
 │   ├── user_login.html      # 로그인
 │   ├── user_signup.html     # 회원가입
+│   ├── user_find_account.html # 계정 찾기 (이메일/비밀번호)
 │   ├── user_password.html   # 비밀번호 변경
-│   └── user_edit.html       # 프로필 수정
+│   ├── user_edit.html       # 프로필 수정
+│   ├── verify-email.html    # 이메일 인증
+│   ├── notifications.html   # 알림
+│   ├── my-activity.html     # 내 활동
+│   └── user-profile.html    # 타 사용자 프로필
 │
 ├── js/
 │   ├── app/                 # 페이지별 진입점
@@ -284,26 +431,27 @@ sequenceDiagram
 
 #### MVC 패턴
 
-- **Model**: API 호출 담당. `AuthModel`, `PostModel`, `UserModel`, `CommentModel`
+- **Model**: API 호출 담당. `AuthModel`, `PostModel`, `UserModel`, `CommentModel`, `NotificationModel`, `ActivityModel`
 - **View**: DOM 렌더링. 정적 메서드로 HTML 생성 및 이벤트 바인딩
-- **Controller**: 비즈니스 로직. Model과 View 조정, 상태 관리
+- **Controller**: 비즈니스 로직. Model과 View 조정, 상태 관리 (`MainController`, `NotificationController`, `MyActivityController`, `UserProfileController` 등)
 
 #### 주요 패턴
 
 - **정적 메서드**: 모든 클래스가 static 메서드만 사용
 - **IntersectionObserver**: 무한 스크롤 구현
 - **Custom Event**: `auth:session-expired` 이벤트로 401 처리 (silent refresh 실패 시 발생)
-- **XSS 방지**: `escapeHtml()` 유틸리티로 사용자 입력 이스케이프
+- **XSS 방지**: `createElement()` / `textContent` 기반 DOM 생성 (innerHTML 금지)
 
 ### 6. 보안 고려사항
 
 | 항목 | 구현 방식 |
 | ---- | --------- |
+| 정보 열거 방지 | 이메일/비밀번호 찾기에서 존재 여부 무관하게 동일 응답 + 더미 bcrypt 해싱 (타이밍 공격 방지) |
 | 비밀번호 해싱 | bcrypt (cost factor 기본값) |
 | JWT 인증 | Access Token(30분, in-memory) + Refresh Token(7일, HttpOnly Cookie, SHA-256 해시 DB 저장) |
 | CORS | 허용 출처 명시적 설정 (localhost:8080) |
 | SQL Injection | Parameterized queries (aiomysql) |
-| XSS | 프론트엔드에서 escapeHtml() 적용 |
+| XSS | 프론트엔드에서 `createElement()` / `textContent` 사용 (innerHTML 금지) |
 | Timing Attack | 로그인 시 존재하지 않는 사용자도 bcrypt 검증 수행 |
 
 ### 7. 비밀번호 정책
@@ -316,7 +464,7 @@ sequenceDiagram
 - **JWT 인증**: Access Token(HS256, 30분) + Refresh Token(opaque random, 7일) 이중 토큰 전략 사용. Access Token은 프론트엔드 in-memory(JS 변수)에 저장하여 XSS 노출 최소화, Refresh Token은 HttpOnly 쿠키로 전달하고 SHA-256 해시로 DB에 저장. 토큰 회전(rotation)을 통해 Refresh Token 탈취 시 자동 무효화. CSRF 미들웨어는 제거됨 (Bearer 토큰이 CSRF 방어 역할).
 - **ORM vs Raw SQL**: SQLAlchemy 등 ORM 사용을 고려했으나, 학습 목적으로 raw SQL을 직접 작성하여 쿼리 최적화 경험을 쌓기로 결정.
 - **Vanilla JS**: React, Vue 등 프레임워크 대신 Vanilla JS를 선택. 프레임워크 학습 비용 없이 JavaScript 기본기를 다지는 것이 목표.
-- **이미지 저장소**: Docker 환경에서는 `/app/uploads` 볼륨에 저장하고 nginx가 직접 서빙. 로컬 개발 시에도 로컬 파일시스템 사용.
+- **이미지 저장소**: 프로덕션에서는 EFS(`/mnt/uploads`)에 저장. 로컬 개발 시에도 로컬 파일시스템 사용.
 - **Soft Delete**: 물리적 삭제 대신 `deleted_at` 컬럼 사용. 데이터 복구 가능성 확보 및 FK 무결성 유지.
 
 ## 마일스톤 (Milestones)
@@ -329,322 +477,99 @@ sequenceDiagram
 | 4단계 | 4주차 | E2E 테스트 작성, QA, 버그 수정 |
 | 5단계 | 5주차 | 문서화, 코드 리뷰, 최종 배포 |
 
-## 최근 변경사항 (Recent Changes)
+## Changelog
 
-## changelog
+### 2026-03 (Mar)
 
-- 2026-02-25: JWT payload 최소화 + 코드 리뷰 수정
-  - JWT payload에서 PII 제거: `email`, `nickname`, `role` 클레임 삭제, `sub`(user_id)만 유지
-  - 파일명 변경: `session_models.py` → `token_models.py`
-  - 변수명 개선: `_ALGORITHM` → `_JWT_ALGORITHM`, `DUMMY_HASH` → `_TIMING_ATTACK_DUMMY_HASH` 등
-  - 주석 정리: 중복 주석 제거, 영어 → 한국어, 잘못된 주석 수정
+- **03-02: 북마크, 댓글 좋아요, 공유, 다중 이미지, 사용자 차단, 인기 게시글**
+  - 북마크: `post_bookmark` 테이블, 게시글 북마크 추가/해제 API, 내 북마크 목록, 상세 `bookmarks_count`+`is_bookmarked`
+  - 댓글 좋아요: `comment_like` 테이블, 댓글별 좋아요/취소 API, 트리에 `likes_count`+`is_liked`, 벌크 조회로 N+1 방지
+  - 사용자 차단: `user_block` 테이블, 차단/해제 API, 게시글 SQL 필터(`NOT IN`), 댓글 Python 후처리 필터
+  - 다중 이미지: `post_image` 테이블(`sort_order`), 최대 5개, `image_urls`↔`image_url` 하위 호환, 마이그레이션 스크립트
+  - 인기 게시글: `hot` 정렬 옵션, `(likes*3+comments*2+views*0.5)/POW(hours+2,1.5)` 가중치 수식
+  - 공유: Web Share API(모바일) / 클립보드 복사(데스크톱) 프론트엔드 전용
+  - 프론트엔드: 낙관적 UI(북마크/좋아요), 이미지 갤러리, 댓글 좋아요 버튼, 차단 버튼, 내 활동 북마크 탭
 
-- 2026-02-25: JWT 인증으로 전환 (세션 기반 → JWT)
-  - 인증 방식 변경: 서버 사이드 세션 → JWT (Access Token 30분 + Refresh Token 7일)
-    - Access Token: HS256 JWT, 프론트엔드 in-memory 저장 (XSS 최소화)
-    - Refresh Token: opaque random string, HttpOnly 쿠키, SHA-256 해시로 DB 저장
-    - 토큰 회전(rotation): 갱신 시 기존 Refresh Token 삭제 + 새 토큰 발급 (원자적 트랜잭션)
-  - DB 스키마 변경: `user_session` 테이블 → `refresh_token` 테이블
-  - 새 엔드포인트: `POST /v1/auth/token/refresh` (토큰 갱신)
-  - CSRF 미들웨어 제거: Bearer 토큰이 CSRF 방어 역할 수행
-  - SessionMiddleware 제거: JWT는 stateless, 서버 사이드 세션 불필요
-  - 프론트엔드 변경:
-    - `ApiService.js`: Bearer 토큰 관리, silent refresh, thundering herd 보호
-    - `AuthModel.js`: 페이지 새로고침 시 HttpOnly 쿠키로 silent refresh
-  - 의존성 변경: `itsdangerous` → `PyJWT`
-  - 만료 토큰 자동 정리: `_periodic_token_cleanup()` 백그라운드 작업 (1시간 간격, `main.py` lifespan)
-  - 테스트 업데이트: 59개 전체 통과
+- **03-02: 관리자 역할, 신고 시스템, 카테고리, 게시글 고정**
+  - 관리자 역할: `user.role` ENUM 컬럼, `require_admin` 의존성, 관리자 게시글/댓글 삭제 권한
+  - 카테고리: `category` 테이블 (4종 시드), `post.category_id` FK, 카테고리별 게시글 필터링
+  - 신고: `report` 테이블 (UNIQUE 중복 방지), 자기 콘텐츠 신고 방지, 관리자 처리(resolved→삭제/dismissed→유지)
+  - 게시글 고정: `post.is_pinned` 플래그, 관리자 전용 PIN/UNPIN API, 목록 상단 표시
 
-- 2026-02-25: 보안 강화, CI/CD 개선, 코드 품질 향상
-  - `ProxyHeadersMiddleware` 보안 수정
-    - `trusted_hosts="*"` → `settings.TRUSTED_PROXIES` 또는 기본값 `["127.0.0.1", "::1"]`
-    - IP 스푸핑 방지를 위해 신뢰할 프록시 IP만 명시적으로 허용
-    - `main.py:88-91`에서 설정 기반 동적 구성
-  - GitHub Actions CI 워크플로우 개선 (`.github/workflows/python-app.yml`)
-    - `test` job 추가: MySQL 서비스 컨테이너, ruff 린팅, mypy 타입 체크, pytest 실행
-    - Python 버전 수정: 3.10 → 3.11 (`pyproject.toml` 요구사항과 일치)
-    - 테스트 게이팅: `needs: test`로 테스트 통과 후에만 배포
-    - PR에서는 테스트만 실행: `if: github.event_name == 'push'` 조건 추가
-    - Docker 빌드 시 `--platform linux/amd64` 명시
-    - `.py`, `pyproject.toml`, `Dockerfile`, `schema.sql` 등 코드 변경 시에만 CI/CD 실행
-    - README, 문서 변경 시 불필요한 Docker 빌드/ECR 푸시 방지
-  - 코드 품질 개선 (ruff/mypy CI 통과)
-    - 13개 미사용 import 제거 (`seed_data.py`, `user_service.py`, `test_*.py`)
-    - `__init__.py` 추가: `utils/`, `database/`, `tests/` (mypy 패키지 인식)
-    - `pyproject.toml`에 `[tool.mypy]` 설정 추가 (pydantic 플러그인, ignore_missing_imports)
-    - 타입 에러 수정: `assert` 문으로 None 체크, `# type: ignore` 주석 추가
+- **03-02: 이메일 인증, 알림, 내 활동, 사용자 프로필**
+  - 이메일 인증: `email_verification` 테이블, 토큰 기반 인증 흐름, `require_verified_email` 가드 (게시글/댓글 쓰기)
+  - 알림 시스템: `notification` 테이블, 좋아요/댓글 트리거, CRUD API, 읽음 처리
+  - 내 활동: 내가 쓴 글/댓글/좋아요한 글 조회 API (`/v1/users/me/posts|comments|likes`)
+  - 사용자 프로필: 공개 프로필 조회 (이메일 제외), `author_id` 필터로 게시글 목록 조회
 
-- 2026-02-24: Docker + EC2 배포로 전환
-  - 배포 아키텍처 변경: CloudFront + S3 + ELB → Docker Compose + 단일 EC2
-    - 이전: CloudFront (CDN) → S3 (정적 파일) + ELB → EC2 (API)
-    - 현재: EC2 (nginx + uvicorn + MySQL, 단일 인스턴스)
-  - Docker Compose 프로덕션 설정 (`docker-compose.prod.yml`)
-    - `frontend`: nginx:alpine 기반, 정적 파일 서빙 + 리버스 프록시
-    - `backend`: FastAPI + uvicorn, `/app/uploads` 볼륨 마운트
-    - `database`: MySQL 9.6, 데이터 영속성을 위한 볼륨 마운트
-    - 컨테이너 간 통신: Docker 내부 네트워크 (`my-community-network`)
-  - nginx 리버스 프록시 설정 (`2-cho-community-fe/nginx.conf`)
-    - HTTPS 강제 리다이렉트 (80 → 443)
-    - Let's Encrypt SSL 인증서 (`/etc/letsencrypt/live/my-community.shop/`)
-    - Clean URL 지원 (`/main` → `post_list.html`, `/login` → `user_login.html`)
-    - API 프록시: `/v1/*`, `/health` → `backend:8000`
-  - 프론트엔드 Dockerfile (`2-cho-community-fe/Dockerfile`)
-    - nginx:alpine 기반 경량 이미지
-    - 헬스체크 포함 (`wget --spider http://localhost:80/`)
-  - 장점: 단일 EC2로 비용 절감, Docker로 환경 일관성 보장, 배포 단순화 (`docker compose up -d`)
+- **03-02: 검색, 정렬, 대댓글 기능**
+  - 게시글 검색: FULLTEXT INDEX(ngram parser)로 제목+내용 한국어 검색, 특수문자 이스케이프, BOOLEAN MODE
+  - 게시글 정렬: 최신순/좋아요순/조회수순/댓글순 4종, `ALLOWED_SORT_OPTIONS` 화이트리스트로 SQL 주입 방지
+  - 대댓글(1단계): `comment.parent_id` 자기참조 FK, 앱 레벨 O(n) 트리 구성, 삭제된 부모 플레이스홀더 표시
+  - 프론트엔드: 검색바+정렬 버튼 UI, 대댓글 인디케이터+들여쓰기, 세대 카운터로 비동기 응답 경쟁 방지
 
-- 2026-02-19: CloudFront + S3 배포 전환
-  - 배포 아키텍처 변경: Single-Origin Nginx (EC2) → **CloudFront + S3 + ELB**
-    - 정적 파일: S3 버킷 + CloudFront CDN 서빙
-    - API 요청: CloudFront `/v1/*` → ELB → EC2:8000
-    - WAF WebACL 연결 (IP Reputation, Common Rule Set, Known Bad Inputs)
-  - WAF `SizeRestrictions_BODY` COUNT 모드 오버라이드 (이미지 업로드 8KB 제한 해제)
-  - 이미지 저장/서빙을 S3 + CloudFront URL 방식으로 전환 (`utils/s3_utils.py`)
-  - `CLOUDFRONT_DOMAIN` 환경변수 추가 (`.env`에서 설정)
-  - ELB Health Check 통과를 위해 uvicorn `--host 0.0.0.0` 바인딩으로 변경
+- **03-01: Locust 부하 테스트 구축**
+  - 3종 사용자 시나리오: ReaderUser(60%), WriterUser(20%), ActiveUser(20%)
+  - 계정 풀(`queue.Queue` 싱글턴)로 동시 사용자 간 계정 1:1 바인딩, Refresh Token 충돌 방지
+  - Rate Limit 준수 설계: 로그인 1회/세션, WriterUser 대기 8-20초, 429 시 `gevent.sleep(65s)` 재시도
+  - AWS 배포 환경 대상 (API Gateway → Lambda → RDS), 동시 50-200명 규모
+  - `seed_accounts.py`: API/DB 이중 모드 계정 시딩 (회원가입 API 또는 직접 DB 접속)
 
-- 2026-02-12: 프론트엔드 개발 환경 변경, Single-Origin Nginx 배포 설정
-  - 쿠키 설정 변경
-    - `main.py`: `same_site="none"` → `same_site="lax"` (보안 강화)
-    - `csrf_protection.py`: `samesite="none"` → `samesite="strict"` (CSRF 최대 보호)
-    - `HTTPS_ONLY`를 환경변수 기반으로 변경 (유연성 향상)
-  - 프론트엔드 API 설정
-    - `config.js`: `API_BASE_URL = ""` (same-origin, nginx가 프록시)
-  - 배포 방식 단순화
-    - Cross-domain (S3 + EC2) → Single-origin (nginx reverse proxy)
-    - 쿠키 문제 해결, 보안 강화, 설정 간소화
-  - 프론트엔드가 npm serve로 마이그레이션 완료
-    - 로컬 개발: FastAPI/uvicorn → `npm serve` (Port 8080)
-    - 프론트엔드는 순수 정적 파일(HTML/CSS/JS)로 Python 의존성 없음
-    - 프로덕션: nginx로 정적 파일 서빙
+### 2026-02 (Feb)
 
-- 2026-02-09: 코드 리뷰 기반 주요 이슈 수정
-  - 보안 관련 수정
-    - `main.py`: CSRF 미들웨어 순서 수정 (DoS 우회 방지)
-      - 변경 전: `LoggingMiddleware → RateLimitMiddleware → CSRFProtectionMiddleware → SessionMiddleware`
-      - 변경 후: `LoggingMiddleware → SessionMiddleware → CSRFProtectionMiddleware → RateLimitMiddleware`
-      - 공격자가 잘못된 CSRF 토큰으로 Rate Limit 우회하는 취약점 제거
-    - `middleware/csrf_protection.py`: CSRF 쿠키 보안 플래그 환경 변수화
-      - `secure=False` (하드코딩) → `secure=settings.HTTPS_ONLY` (환경 기반)
-      - 프로덕션 환경에서 HTTPS 강제, MITM 공격 방어
-  - 테스트 품질 개선
-    - `tests/test_transaction_race_conditions.py`: 빈 테스트 플레이스홀더 3개 제거
-      - 제거: `test_update_user_race_condition`, `test_update_post_race_condition`, `test_add_user_race_condition`
-      - 실제 검증 로직 없이 `pass`만 포함, 허위 통과 결과 제공
-  - 문서 정확성 개선
-    - `README.md`: 변경사항 설명 정확성 수정 (line 335-336)
-      - 이전: "rowcount 체크를 쿼리 실행 전에 하여 UPDATE가 절대 실행되지 않던 버그"
-      - 수정: "params 순서 오류 수정 (post_id를 params 끝에 추가)" + "transactional() 사용으로 UPDATE+SELECT 원자성 보장"
-  - 의존성 추가
-    - `cryptography>=46.0.0` 패키지 추가 (MySQL 8.0 `caching_sha2_password` 인증 지원)
+- **02-28: 계정 찾기 기능 (이메일 찾기 + 비밀번호 재설정)**
+  - 이메일 찾기: 닉네임으로 마스킹된 이메일 조회 (`POST /v1/users/find-email`)
+  - 비밀번호 재설정: 임시 비밀번호 생성 후 이메일 발송 (`POST /v1/users/reset-password`)
+  - 이메일 발송 이중 지원: SES(프로덕션) + SMTP(로컬 개발), `asyncio.to_thread()`로 비동기 처리
+  - 보안: 정보 열거 방지(존재 여부 무관 동일 응답), 타이밍 공격 방지(더미 bcrypt), Rate Limiting(5/5분, 3/5분)
 
-- 2026-02-09: CSRF Protection 구현
-  - Double Submit Cookie 패턴을 사용한 CSRF 방어 추가
-    - `middleware/csrf_protection.py`: 상태 변경 요청(POST/PUT/PATCH/DELETE)에 CSRF 토큰 검증
-    - 쿠키 토큰과 헤더 토큰 일치 여부 확인 (constant-time comparison)
-    - 로그인/회원가입 등 인증 전 엔드포인트는 검증 제외
-  - CORS 설정 업데이트: `X-CSRF-Token` 헤더 허용
-  - 테스트 인프라 개선
-    - `tests/test_csrf.py`: CSRF 보호 로직 검증 (9개 테스트 케이스)
-    - `tests/conftest.py`: CSRF 토큰 자동 포함 테스트 클라이언트 (CSRFAsyncClient)
-  - 전체 테스트 통과: 51개 (기존 42개 + CSRF 9개)
+- **02-28: 코드 리뷰 기반 보안 강화 + 버그 수정**
+  - 보안 취약점: Path Traversal(`Path.is_relative_to()`), SSRF(`/uploads/` 프리픽스 강제), 이미지 URL 검증 공통 헬퍼(`_image_validators.py`)
+  - 토큰·시크릿: `SELECT ... FOR UPDATE`(replay attack 방지), Lambda 시크릿 SSM SecureString 전환(`get_parameters` 배치 API)
+  - 안정성: `transactional()` 일관성 통일, Rate limiter 키 동기화, IntegrityError 처리 개선
 
-- 2026-02-09: 코드 품질 & 보안 강화
-  - 크리티컬 버그 수정
-    - `models/post_models.py::update_post()`: params 순서 오류 수정 (post_id를 params 끝에 추가하도록 수정)
-    - `models/post_models.py::update_post()`: transactional() 사용으로 UPDATE+SELECT 원자성 보장
-    - `models/user_models.py::add_user()`, `update_user()`: transactional()을 connection처럼 사용하던 버그 수정
-    - `models/user_models.py::update_password()`: 트랜잭션 없이 UPDATE 후 다른 연결에서 SELECT하던 Phantom Read 가능성 수정
-  - 보안 강화
-    - SQL Injection 방어: 동적 UPDATE 쿼리에 whitelist 검증 추가 (ALLOWED_POST_COLUMNS, ALLOWED_USER_COLUMNS)
-    - 컬럼명을 f-string으로 삽입하는 패턴에 명시적 검증 로직 추가
-  - 코드 품질 개선
-    - `services/user_service.py`의 중복 함수 `_generate_anonymized_user_data()` 제거 (models에만 유지)
-  - 테스트 검증: 42개 전체 테스트 통과 확인 (커버리지 79.59%)
+- **02-27: GitHub Actions CD 파이프라인 구축**
+  - `deploy-backend.yml`: `workflow_dispatch` → Docker build → ECR push (SHA + latest) → Lambda update
+  - OIDC 인증 (GitHub → AWS IAM Role), 환경 선택 (dev/staging/prod)
+  - `--provenance=false` 필수, `aws lambda wait function-updated`로 배포 완료 대기
 
-- 2026-02-05: 코드 리팩토링
-  - `services/user_service.py` 생성: 사용자 관련 비즈니스 로직 분리
-  - `controllers/user_controller.py` 리팩토링: HTTP 요청/응답 처리만 담당하도록 변경
-  - 메모리 누수 방지 (LRU 메커니즘)
-  - IP 위조 방어 (프록시 검증, `ipaddress`)
-  - 트랜잭션 적용 (like, comment)
-  - DB 격리 수준 설정 (READ COMMITTED)
-  - 커넥션 풀 크기 증가 (5-50)
+- **02-26: AWS 인프라 Terraform 구축 및 배포**
+  - 14개 Terraform 모듈 구성 및 dev 환경 전체 배포
+  - CloudFront CDN + HTTPS + Clean URL (CloudFront Functions)
+  - Lambda 컨테이너 (Python 3.13/AL2023), EFS, RDS, API Gateway, EC2 bastion
+  - 앱 코드에서 AWS 하드코딩 제거, 로컬 개발 환경 정리
 
-- 2026-02-04: 아키텍처 리팩토링
-  - Service Layer(서비스 계층) 도입
-    - `services/post_service.py` 생성: 게시글 관련 비즈니스 로직 분리
-    - `PostController` 리팩토링: HTTP 요청/응답 처리만 담당 (Thin Controller)
-  - 코드 유지보수성 및 테스트 용이성 향상
+- **02-25: JWT 인증 전환 + 보안 강화**
+  - 세션 기반 → JWT (Access Token 30분 + Refresh Token 7일, 토큰 회전)
+  - JWT payload 최소화: PII 제거, `sub`(user_id)만 유지
+  - ProxyHeadersMiddleware 보안 수정, GitHub Actions CI 구축
 
-- 2026-02-04: 테스트 인프라
-  - 단위 테스트 도입
-    - `tests/test_rate_limiter.py`: Rate Limiter 로직 검증
-    - `tests/test_auth_controller.py`: Auth Controller 로직 검증 (Mock 활용)
-  - 커버리지 측정 설정
-    - `pytest-cov` 추가 및 `pytest.ini` 설정 (목표 80%, 달성 85%)
-  - 테스트 안정성 개선 (Test Isolation)
-    - `conftest.py`의 `clear_all_data`에 `TRUNCATE user_session`, `user` 추가
+- **02-09 ~ 12: CSRF 보호 + 코드 품질 + 프론트엔드 환경 개선**
+  - Double Submit Cookie 패턴 CSRF 방어 (JWT 전환 후 제거)
+  - 크리티컬 버그 수정: `update_post()` params 순서, 트랜잭션 원자성
+  - SQL Injection 방어: 동적 쿼리 whitelist 검증
+  - 프론트엔드 npm serve 마이그레이션 (Port 8080)
 
-- 2026-02-04: 보안 강화
-  - Rate Limiter 미들웨어 추가 (`middleware/rate_limiter.py`)
-    - IP 기반 요청 속도 제한 (브루트포스 방지)
-    - 로그인: 1분에 5회, 회원가입: 1분에 3회
-    - 엔드포인트별 설정 가능
-  - 프로덕션 에러 마스킹 (`DEBUG` 설정 추가)
-    - `DEBUG=False`일 때 상세 에러 정보 숨김
-    - 트래킹 ID는 항상 포함하여 로그 추적 가능
-  - 코드 리팩토링
-    - 닉네임 검증 로직을 `_NICKNAME_PATTERN` 상수로 추출
-    - 에러 응답 헬퍼 함수 추가 (`utils/exceptions.py`)
-    - `post_controller.py`에 에러 헬퍼 적용
+- **02-02 ~ 05: 아키텍처 리팩토링**
+  - Service Layer 도입 (`post_service`, `user_service`)
+  - Rate Limiter 미들웨어 (IP 기반 브루트포스 방지)
+  - 단위 테스트 도입 (커버리지 85%), DB 격리 수준 READ COMMITTED
+  - 코드 리뷰 기반 보안/코드 품질 전면 개선
 
-- 2026-02-04
-  - 버그 수정
-    - `post_view_log` 테이블에 `UNIQUE KEY (user_id, post_id, view_date)` 누락으로 조회수가 매 방문마다 증가하던 버그 수정
-    - `view_date` 컬럼을 VIRTUAL에서 STORED로 변경 (UNIQUE 인덱스 지원)
-  - 코드 중복 제거
-    - 댓글 스키마 검증 로직을 `_validate_comment_content()` 공통 함수로 추출
-    - 비밀번호 검증 로직을 `_validate_password()` + `_PASSWORD_PATTERN` 상수로 추출
-    - `_build_author_dict`를 `schemas/common.py`의 `build_author_dict`로 이동, `comment_models.py`에서도 공유
-    - 기본 프로필 이미지 경로를 `DEFAULT_PROFILE_IMAGE` 상수로 통합
-  - 코드 정리
-    - 테스트 헬퍼 `clear_all_data()`를 `post_models.py`에서 `tests/conftest.py`로 이동
-    - `post_controller.py`의 미사용 `import datetime` 제거
-    - `database/schema.sql`의 미사용 `image` 테이블 스키마 제거
-  - 구조 개선
-    - `auth_controller`와 `user_models` 간의 순환 참조 의존성 제거 (session import 분리)
-    - `user_controller` 로깅 표준화 (`traceback` 제거 → `logger.exception` 적용)
+### 2026-01 (Jan)
 
-- 2026-02-04
-  - 코드 중복 제거
-    - `withdraw_user`/`cleanup_deleted_user` 공통 로직을 `_disconnect_and_anonymize_user`로 추출
-    - 모든 컨트롤러의 응답 딕셔너리를 `create_response` 헬퍼로 통일
-    - 사용자 직렬화 로직을 `serialize_user` 헬퍼로 추출
-    - `post_models.py`의 author 딕셔너리 구성을 `_build_author_dict`로 추출
-  - 버그 수정
-    - `get_optional_user`에서 만료된 세션을 DB에서 삭제하지 않던 문제 수정
-    - `get_optional_user`에서 탈퇴한 사용자의 세션을 clear하지 않던 문제 수정
+- **01-28 ~ 30: 데이터베이스 연동 + 보안 강화**
+  - MySQL + aiomysql 커넥션 풀, 트랜잭션 적용
+  - bcrypt 비밀번호 해싱, 세션 보안 강화
+  - 조회수/무한 스크롤/이미지 업로드 버그 수정
+  - 좋아요/댓글 모델 분리, 코드 중복 제거
 
-- 2026-02-02: 코드 리뷰 & 문서화
-  - `bcrypt` 의존성 추가
-  - 데이터베이스 포트를 허용된 오리진 목록에서 제거
-  - `get_connection()` 대신 `transactional()` 적용
-  - 세션 만료 비교 시 `timezone.utc` 적용
-  - 세션 생성 시 UTC 사용
-  - 하드코딩된 경로 설정 개선
-  - 불필요한 이중 체크 제거
-  - SQL 중복 제거
-  - 데이터베이스 인덱스 최적화
-  - 미사용 함수 삭제
-  - `create_response()` 공통 함수 추가
-  - 파일 유틸 모듈 추가
-  - 날짜 포맷팅 모듈 추가
-  - 세션 고정 취약점 해결
-  - 타이밍 공격 취약점 해결
-  - 트랜잭션 일관성 강화
-  - 테크 스펙 작성
-  - AI 에이전트 도입
-  - 파일 업로드 함수를 스트리밍 방식으로 변경
+- **01-19 ~ 26: 게시글 API + 프론트엔드 연결**
+  - 게시글 CRUD, 좋아요, 댓글 API 완성
+  - CORS 설정, 프론트엔드 서버 연결
+  - Pydantic 스키마, 미들웨어(로깅/타이밍/예외처리) 도입
 
-- 2026-01-30: 리팩토링
-  - 좋아요, 댓글을 별도의 모델로 분리
-  - 좋아요, 댓글 API를 별도의 컨트롤러로 분리
-  - 탈퇴 유저 처리 로직 정리
-  - `RotatingFileHandler` 추가
-  - 중복 함수 제거
-  - 세션 모듈 분리
-
-- 2026-01-29: 오류 수정 & 보안 강화
-  - 게시글 목록 조회 시 매개변수가 잘못 전달되던 이슈 해결
-  - 게시글 수정 시 image_url이 전달되지 않던 이슈 해결
-  - 조회수가 제대로 반영되지 않던 이슈 해결
-  - 게시글 목록의 끝까지 가도 인피니티 스크롤링이 계속되던 이슈 해결
-  - 비밀번호 해싱 구현
-  - 게시글 정렬 안정성을 위해 `id DESC`를 보조 정렬 기준으로 추가
-  - 이미지 업로드 시 전송이 제대로 되지 않던 이슈 해결
-  - 세션 보안 강화
-  - 전역 예외 핸들러 정보 노출 방지
-  - 데이터베이스 관련 정보를 완전히 .env로 분리
-  - 애플리케이션 전용 데이터베이스 계정 생성 및 권한 설정
-  - HTTP Only 쿠키 설정으로 인해 로그아웃이 되지 않는 이슈 해결
-  - 비밀번호 변경을 위한 API `PUT /v1/users/me/password`가 요구사항과 달랐던 부분 수정
-  - 트랜잭션 적용
-  - 파일 유틸 모듈을 추가하여 코드 중복 제거
-  - 데이터베이스 쿼리 최적화
-
-- 2026-01-28: 데이터베이스
-  - 데이터베이스 생성 및 연결 테스트
-  - 데이터베이스에 데이터를 추가하고, 모델 계층에서 데이터를 조회하여 반환하도록 변경
-  - 컨트롤러, 스키마, 의존성 등 다른 계층도 데이터베이스에 맞게 변경
-  - 프로필 이미지가 업로드되지 않던 문제 해결
-
-- 2026-01-26: 프론트엔드 서버와 연결
-  - 엔드포인트 조정
-  - CORS 설정
-  - core 모듈을 추가하여 설정 객체 분리
-
-- 2026-01-19: 게시글 관련 API 구현 완료, API 문서화 시작
-  - 게시글 목록 조회: `GET /v1/posts` 엔드포인트 추가
-    - 페이지네이션 및 최신순 정렬 기능 구현
-  - 특정 게시글 상세 조회: `GET /v1/posts/{post_id}` 엔드포인트 추가
-  - 게시글 생성: `POST /v1/posts` 엔드포인트 추가
-    - 이미지 업로드 기능 구현
-  - 게시글 수정: `PATCH /v1/posts/{post_id}` 엔드포인트 추가
-  - 게시글 삭제: `DELETE /v1/posts/{post_id}` 엔드포인트 추가
-  - 게시글 좋아요: `POST /v1/posts/{post_id}/likes` 엔드포인트 추가
-  - 게시글 좋아요 취소: `DELETE /v1/posts/{post_id}/likes` 엔드포인트 추가
-  - 댓글 생성: `POST /v1/posts/{post_id}/comments` 엔드포인트 추가
-  - 댓글 수정: `PUT /v1/posts/{post_id}/comments/{comment_id}` 엔드포인트 추가
-  - 댓글 삭제: `DELETE /v1/posts/{post_id}/comments/{comment_id}` 엔드포인트 추가
-  - API 문서화
-  - 이용약관: `GET /v1/terms` 엔드포인트 추가
-
-- 2026-01-17: 리팩토링
-  - 스키마 패키지 추가, Pydantic 모델 도입
-  - 라우터 재구성
-  - 컨트롤러 재구성
-  - 의존성 패키지 추가
-  - 로깅 & 타이밍 미들웨어 추가
-  - 컨트롤러에 맞게 라우터 수정
-  - 요청 컨텍스트 의존성 추가
-  - 전역 예외 처리기 추가
-  - 닉네임을 path parameter로 사용하는 문제 해결
-
-- 2026-01-15: 회원 관련 API 프로토타입 구현 완료
-  - 회원정보 변경: `PATCH /v1/users/me` 엔드포인트 추가
-    - 닉네임 및 이메일 변경 기능 구현
-    - 변경 시 중복 검사 및 형식 검사 추가
-    - 세션 정보 자동 업데이트
-  - 비밀번호 변경: `PUT /v1/users/me/password` 엔드포인트 추가
-    - 현재 비밀번호 확인
-    - 새 비밀번호와 새 비밀번호 확인이 일치하는지 확인
-    - 새 비밀번호가 정책에 부합하는지 확인
-    - 세션 정보 자동 업데이트
-  - 회원 탈퇴: `DELETE /v1/users/me` 엔드포인트 추가
-    - 탈퇴 요청 시 비활성화 후 삭제 시간 기록
-    - 비밀번호 입력 및 직접 동의 절차 추가
-  - 패키지 구조 개선
-    - `models`, `routers`, `controllers`를 확실하게 패키지로 구성하기 위해 `__init__.py` 파일 추가
-    - `__init__.py` 파일에 패키지 내의 모듈들을 import하도록 수정
-
-- 2026-01-14: 세션 기반의 간단한 로그인/로그아웃 기능 구현
-  - 세션 ID 생성 및 관리를 위해 `SessionMiddleware` 추가
-  - 회원가입/로그인/로그아웃 API 구현
-  - 사용자 모델을 데이터 클래스로 변환
-  - 기본 프로필 이미지 추가(`/assets`)
-  - 프로필 조회 기능을 ID 기반에서 닉네임 기반으로 전환
-  - 라우터 정의를 `main.py`에서 라우터 모듈 내부로 이전
-  - `.env` 파일 추가, 민감한 데이터 이전.
-
-- 2026-01-12: API 설계 후 기본 구조 구현
-  - router-controller-model 구조 구현
-  - 인증 컨트롤러와 라우터 추가(`/v1/auth`)
-  - 사용자 컨트롤러와 라우터 추가(`/v1/users`)
-  - 사용자 데이터 모델과 관련 함수 추가(`models/user_models.py`)
-  - 회원가입 기능 추가(`controllers/user_controller.py`)
-  - 라우터 구조 개선 (`/v1`)
-  - `pyproject.toml` 패키지 관련 이슈 해결
-  - CORS 미들웨어 추가
-
-- 2026-01-06: router-controller-model 구조 구현
+- **01-12 ~ 17: 초기 구현**
+  - router-controller-model 아키텍처 구현
+  - 회원가입/로그인/로그아웃 (세션 기반)
+  - 회원 CRUD API (프로필, 비밀번호 변경, 탈퇴)

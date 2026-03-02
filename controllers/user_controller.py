@@ -11,14 +11,20 @@ from schemas.user_schemas import (
     ChangePasswordRequest,
     WithdrawRequest,
 )
+from schemas.recovery_schemas import FindEmailRequest, FindPasswordRequest
 from schemas.common import create_response, serialize_user
 from dependencies.request_context import get_request_timestamp
-from utils.storage import save_uploaded_file
-from core.config import settings
+from utils.upload import save_file
 from services.user_service import UserService
 
-# 프로필 이미지 저장 경로 (설정에서 로드)
-PROFILE_IMAGE_UPLOAD_DIR = settings.PROFILE_IMAGE_UPLOAD_DIR
+
+def _serialize_public_user(user) -> dict:
+    """타 사용자 프로필용 직렬화 (이메일 제외)."""
+    return {
+        "user_id": user.id,
+        "nickname": user.nickname,
+        "profileImageUrl": user.profileImageUrl,
+    }
 
 
 async def get_user(user_id: int, request: Request) -> dict:
@@ -29,7 +35,7 @@ async def get_user(user_id: int, request: Request) -> dict:
     """
     timestamp = get_request_timestamp(request)
 
-    if not user_id or user_id < 1:
+    if user_id < 1:
         # Service에서 처리할 수도 있으나, controller 레벨의 기본 유효성 검사로 남겨둠
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -48,9 +54,9 @@ async def get_user(user_id: int, request: Request) -> dict:
     # 단, get_user는 Service에서 user_models.get_user_by_id 호출 후 None이면 not_found_error raise함.
 
     return create_response(
-        "AUTH_SUCCESS",
-        "사용자 조회에 성공했습니다.",
-        data={"user": serialize_user(user)},
+        "QUERY_SUCCESS",
+        "유저 조회에 성공했습니다.",
+        data={"user": _serialize_public_user(user)},
         timestamp=timestamp,
     )
 
@@ -67,7 +73,7 @@ async def create_user(
     profile_image_url = user_data.profileImageUrl
     if profile_image:
         try:
-            profile_image_url = await save_uploaded_file(profile_image, folder="profiles")
+            profile_image_url = await save_file(profile_image, folder="profiles")
         except HTTPException as e:
             if isinstance(e.detail, dict):
                 e.detail["timestamp"] = timestamp
@@ -112,7 +118,7 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
     return create_response(
         "QUERY_SUCCESS",
         "유저 조회에 성공했습니다.",
-        data={"user": serialize_user(user)},
+        data={"user": _serialize_public_user(user)},
         timestamp=timestamp,
     )
 
@@ -151,6 +157,7 @@ async def change_password(
     # Service Layer 호출
     await UserService.change_password(
         user_id=current_user.id,
+        current_password=password_data.current_password,
         new_password=password_data.new_password,
         new_password_confirm=password_data.new_password_confirm,
         stored_password_hash=current_user.password,
@@ -193,7 +200,7 @@ async def upload_profile_image(
     timestamp = get_request_timestamp(request)
 
     try:
-        url = await save_uploaded_file(file, folder="profiles")
+        url = await save_file(file, folder="profiles")
     except HTTPException as e:
         if isinstance(e.detail, dict):
             e.detail["timestamp"] = timestamp
@@ -203,5 +210,55 @@ async def upload_profile_image(
         "IMAGE_UPLOADED",
         "프로필 이미지가 업로드되었습니다.",
         data={"url": url},
+        timestamp=timestamp,
+    )
+
+
+async def find_email(body: FindEmailRequest, request: Request) -> dict:
+    """닉네임으로 가입한 이메일을 마스킹하여 반환합니다.
+
+    Args:
+        body: 닉네임이 담긴 요청 본문.
+        request: FastAPI Request 객체.
+
+    Returns:
+        마스킹된 이메일이 포함된 응답 딕셔너리.
+    """
+    timestamp = get_request_timestamp(request)
+    masked_email = await UserService.find_email_by_nickname(body.nickname, timestamp)
+    return create_response(
+        "FIND_EMAIL_SUCCESS",
+        "이메일 조회가 완료되었습니다.",
+        data={"masked_email": masked_email},
+        timestamp=timestamp,
+    )
+
+
+async def reset_password(body: FindPasswordRequest, request: Request) -> dict:
+    """임시 비밀번호를 생성하여 이메일로 발송합니다.
+
+    보안: 이메일 존재 여부에 관계없이 항상 동일한 성공 응답을 반환합니다.
+    이메일 발송 실패 시에도 존재 여부를 숨기기 위해 성공 응답을 반환하되,
+    실패 사실을 로그에 기록합니다.
+
+    Args:
+        body: 이메일이 담긴 요청 본문.
+        request: FastAPI Request 객체.
+
+    Returns:
+        임시 비밀번호 발송 성공 응답 딕셔너리.
+    """
+    import logging
+
+    timestamp = get_request_timestamp(request)
+    try:
+        await UserService.reset_password(body.email, timestamp)
+    except RuntimeError:
+        # 이메일 발송 실패 시에도 보안상 성공 응답 반환 (이메일 존재 여부 노출 방지)
+        # 비밀번호는 변경되지 않았으므로 사용자 계정에 영향 없음
+        logging.getLogger(__name__).exception("비밀번호 재설정 이메일 발송 실패")
+    return create_response(
+        "RESET_PASSWORD_SUCCESS",
+        "이메일을 확인해주세요. 임시 비밀번호가 발송되었습니다.",
         timestamp=timestamp,
     )

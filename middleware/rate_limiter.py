@@ -90,7 +90,7 @@ class RateLimiter:
                 # IP를 마지막 요청 시간 기준으로 정렬 (오래된 순)
                 sorted_ips = sorted(
                     self._requests.items(),
-                    key=lambda item: min(item[1]) if item[1] else datetime.min
+                    key=lambda item: max(item[1]) if item[1] else datetime.min
                 )
 
                 # 가장 오래된 IP부터 제거
@@ -134,13 +134,23 @@ _rate_limiter = RateLimiter()
 # 엔드포인트별 Rate Limit 설정
 RATE_LIMIT_CONFIG = {
     # 인증 관련 - 엄격한 제한 (브루트포스 방지)
-    "/v1/auth/login": {"max_requests": 5, "window_seconds": 60},  # 1분에 5회
-    "/v1/auth/signup": {"max_requests": 3, "window_seconds": 60},  # 1분에 3회
+    "/v1/auth/session": {"max_requests": 5, "window_seconds": 60},  # 1분에 5회
+    "/v1/users/": {"max_requests": 3, "window_seconds": 60},  # 1분에 3회 (회원가입)
     # 사용자 정보 변경 - 중간 제한
     "/v1/users/me/password": {"max_requests": 3, "window_seconds": 60},
-    "/v1/users/me/withdraw": {"max_requests": 2, "window_seconds": 60},
+    "DELETE:/v1/users/me": {"max_requests": 2, "window_seconds": 60},  # 회원 탈퇴
+    "PATCH:/v1/users/me": {"max_requests": 10, "window_seconds": 60},  # 프로필 수정
     # 게시글 작성 - 스팸 방지
     "/v1/posts": {"max_requests": 10, "window_seconds": 60},  # POST만 적용
+    # 계정 찾기 - 브루트포스 방지 (5분 윈도우로 강화)
+    "/v1/users/find-email": {"max_requests": 5, "window_seconds": 300},
+    "/v1/users/reset-password": {"max_requests": 3, "window_seconds": 300},
+    # 이메일 인증 - 브루트포스 방지
+    "/v1/auth/verify-email": {"max_requests": 10, "window_seconds": 60},
+    "/v1/auth/resend-verification": {"max_requests": 3, "window_seconds": 300},
+    # 신고 - 스팸 방지
+    "/v1/reports": {"max_requests": 10, "window_seconds": 60},
+    "/v1/admin/reports": {"max_requests": 30, "window_seconds": 60},
 }
 
 # 기본 Rate Limit (설정되지 않은 엔드포인트)
@@ -227,8 +237,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if os.environ.get("TESTING") == "true":
             return await call_next(request)
 
-        # GET 요청은 Rate Limit 적용 안 함 (읽기 작업)
-        if request.method == "GET":
+        # GET, OPTIONS 요청은 Rate Limit 적용 안 함
+        # OPTIONS: CORS preflight 요청은 브라우저가 자동 생성하므로 제한 불필요
+        if request.method in ("GET", "OPTIONS"):
             return await call_next(request)
 
         # 정적 파일은 제외
@@ -242,8 +253,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = get_client_ip(request)
         path = request.url.path
 
-        # 엔드포인트별 설정 확인
-        config = RATE_LIMIT_CONFIG.get(path, DEFAULT_RATE_LIMIT)
+        # 엔드포인트별 설정 확인 (METHOD:path 키 우선, path만 있는 키 fallback)
+        method_key = f"{request.method}:{path}"
+        config = RATE_LIMIT_CONFIG.get(
+            method_key, RATE_LIMIT_CONFIG.get(path, DEFAULT_RATE_LIMIT)
+        )
 
         is_limited, remaining = await _rate_limiter.is_rate_limited(
             ip=client_ip,

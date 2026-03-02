@@ -31,13 +31,12 @@ dependencies = [
     "watchfiles>=1.1.1",
     "websockets>=15.0.1",
     "cryptography>=46.0.5",
-    "boto3>=1.35.0",
-    "boto>=2.49.0",
     "mangum>=0.21.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "pytest-cov", "httpx", "ruff", "mypy"]
+load-test = ["locust>=2.28.0"]
 
 [tool.setuptools]
 packages = ["routers", "controllers", "schemas", "models", "dependencies", "middleware", "utils"]
@@ -60,4 +59,10 @@ ignore_errors = true
 # Allow untyped definitions in tests
 [[tool.mypy.overrides]]
 module = "tests.*"
+ignore_errors = true
+
+# load_tests: locust/requests 등 타입 스텁 미제공 라이브러리 사용
+[[tool.mypy.overrides]]
+module = "load_tests.*"
+ignore_missing_imports = true
 ignore_errors = true

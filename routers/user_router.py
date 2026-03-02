@@ -6,6 +6,7 @@
 from fastapi import (
     APIRouter,
     Depends,
+    Query,
     Request,
     status,
     UploadFile,
@@ -14,8 +15,8 @@ from fastapi import (
     HTTPException,
 )
 from pydantic import ValidationError
-from controllers import user_controller
-from dependencies.auth import get_current_user, get_optional_user
+from controllers import user_controller, activity_controller, block_controller
+from dependencies.auth import get_current_user, get_optional_user, require_verified_email
 from models.user_models import User
 from schemas.user_schemas import (
     CreateUserRequest,
@@ -23,6 +24,7 @@ from schemas.user_schemas import (
     ChangePasswordRequest,
     WithdrawRequest,
 )
+from schemas.recovery_schemas import FindEmailRequest, FindPasswordRequest
 
 
 user_router = APIRouter(prefix="/v1/users", tags=["users"])
@@ -74,6 +76,36 @@ async def create_user(
     return await user_controller.create_user(user_data, profile_image, request)
 
 
+@user_router.post("/find-email", status_code=status.HTTP_200_OK)
+async def find_email(body: FindEmailRequest, request: Request) -> dict:
+    """닉네임으로 이메일을 찾습니다. 인증 불필요.
+
+    Args:
+        body: 닉네임이 담긴 요청 본문.
+        request: FastAPI Request 객체.
+
+    Returns:
+        마스킹된 이메일 주소가 포함된 응답.
+    """
+    return await user_controller.find_email(body, request)
+
+
+@user_router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(body: FindPasswordRequest, request: Request) -> dict:
+    """이메일로 임시 비밀번호를 발송합니다. 인증 불필요.
+
+    보안: 이메일 존재 여부에 관계없이 항상 200을 반환합니다.
+
+    Args:
+        body: 이메일이 담긴 요청 본문.
+        request: FastAPI Request 객체.
+
+    Returns:
+        임시 비밀번호 발송 성공 응답.
+    """
+    return await user_controller.reset_password(body, request)
+
+
 @user_router.get("/me", status_code=status.HTTP_200_OK)
 async def get_my_info(
     request: Request, current_user: User = Depends(get_current_user)
@@ -88,6 +120,97 @@ async def get_my_info(
         사용자 정보가 포함된 응답.
     """
     return await user_controller.get_my_info(current_user, request)
+
+
+@user_router.get("/me/posts", status_code=status.HTTP_200_OK)
+async def get_my_posts(
+    request: Request,
+    offset: int = Query(0, ge=0, description="시작 위치"),
+    limit: int = Query(10, ge=1, le=100, description="조회 수"),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """내가 쓴 글 목록을 조회합니다.
+
+    Args:
+        request: FastAPI Request 객체.
+        offset: 시작 위치 (0부터 시작).
+        limit: 조회할 게시글 수.
+        current_user: 현재 인증된 사용자.
+
+    Returns:
+        내가 쓴 글 목록과 페이지네이션 정보가 포함된 응답.
+    """
+    return await activity_controller.get_my_posts(current_user, request, offset, limit)
+
+
+@user_router.get("/me/comments", status_code=status.HTTP_200_OK)
+async def get_my_comments(
+    request: Request,
+    offset: int = Query(0, ge=0, description="시작 위치"),
+    limit: int = Query(10, ge=1, le=100, description="조회 수"),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """내가 쓴 댓글 목록을 조회합니다.
+
+    Args:
+        request: FastAPI Request 객체.
+        offset: 시작 위치 (0부터 시작).
+        limit: 조회할 댓글 수.
+        current_user: 현재 인증된 사용자.
+
+    Returns:
+        내가 쓴 댓글 목록과 페이지네이션 정보가 포함된 응답.
+    """
+    return await activity_controller.get_my_comments(
+        current_user, request, offset, limit
+    )
+
+
+@user_router.get("/me/likes", status_code=status.HTTP_200_OK)
+async def get_my_likes(
+    request: Request,
+    offset: int = Query(0, ge=0, description="시작 위치"),
+    limit: int = Query(10, ge=1, le=100, description="조회 수"),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """좋아요한 글 목록을 조회합니다.
+
+    Args:
+        request: FastAPI Request 객체.
+        offset: 시작 위치 (0부터 시작).
+        limit: 조회할 게시글 수.
+        current_user: 현재 인증된 사용자.
+
+    Returns:
+        좋아요한 글 목록과 페이지네이션 정보가 포함된 응답.
+    """
+    return await activity_controller.get_my_likes(current_user, request, offset, limit)
+
+
+@user_router.get("/me/bookmarks", status_code=status.HTTP_200_OK)
+async def get_my_bookmarks(
+    request: Request,
+    offset: int = Query(0, ge=0, description="시작 위치"),
+    limit: int = Query(10, ge=1, le=100, description="조회 수"),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """북마크한 글 목록을 조회합니다."""
+    return await activity_controller.get_my_bookmarks(
+        current_user, request, offset, limit
+    )
+
+
+@user_router.get("/me/blocks", status_code=status.HTTP_200_OK)
+async def get_my_blocks(
+    request: Request,
+    offset: int = Query(0, ge=0, description="시작 위치"),
+    limit: int = Query(10, ge=1, le=100, description="조회 수"),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """차단 목록을 조회합니다."""
+    return await block_controller.get_my_blocks(
+        current_user, request, offset, limit
+    )
 
 
 @user_router.get("/{user_id}", status_code=status.HTTP_200_OK)
@@ -192,3 +315,26 @@ async def upload_profile_image(
         업로드된 이미지 URL이 포함된 응답.
     """
     return await user_controller.upload_profile_image(file, current_user, request)
+
+
+# ============ 사용자 차단 라우터 ============
+
+
+@user_router.post("/{user_id}/block", status_code=status.HTTP_201_CREATED)
+async def block_user(
+    user_id: int,
+    request: Request,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """사용자를 차단합니다."""
+    return await block_controller.block_user(user_id, current_user, request)
+
+
+@user_router.delete("/{user_id}/block", status_code=status.HTTP_200_OK)
+async def unblock_user(
+    user_id: int,
+    request: Request,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """사용자 차단을 해제합니다."""
+    return await block_controller.unblock_user(user_id, current_user, request)

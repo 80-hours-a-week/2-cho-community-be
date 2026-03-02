@@ -1,6 +1,8 @@
 """like_controller: 좋아요 관련 컨트롤러 모듈."""
 
 from fastapi import HTTPException, Request, status
+from pymysql.err import IntegrityError
+
 from models import post_models, like_models
 from models.user_models import User
 from schemas.common import create_response
@@ -37,9 +39,10 @@ async def like_post(
             },
         )
 
-    # 좋아요 추가 시도 (중복이면 None 반환)
-    like = await like_models.add_like(post_id, current_user.id)
-    if like is None:
+    # 좋아요 추가 시도 (IntegrityError 발생 시 중복 좋아요)
+    try:
+        await like_models.add_like(post_id, current_user.id)
+    except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -48,6 +51,22 @@ async def like_post(
                 "timestamp": timestamp,
             },
         )
+
+    # 알림 생성 (실패해도 좋아요에 영향 없음)
+    try:
+        from models import notification_models
+
+        if post.author_id:
+            await notification_models.create_notification(
+                user_id=post.author_id,
+                notification_type="like",
+                post_id=post_id,
+                actor_id=current_user.id,
+            )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning("좋아요 알림 생성 실패", exc_info=True)
 
     return create_response(
         "LIKE_ADDED",

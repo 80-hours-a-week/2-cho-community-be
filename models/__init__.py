@@ -5,7 +5,6 @@
 
 from .user_models import (
     User,
-    get_users,
     get_user_by_id,
     get_user_by_email,
     get_user_by_nickname,
@@ -51,14 +50,49 @@ from .token_models import (
     get_refresh_token,
     delete_refresh_token,
     rotate_refresh_token,
-    delete_user_refresh_tokens,
     cleanup_expired_tokens,
+)
+
+from .verification_models import (
+    create_verification_token,
+    verify_token,
+    is_user_verified,
+    cleanup_expired_verification_tokens,
+)
+
+from .notification_models import (
+    create_notification,
+    get_notifications,
+    get_unread_count,
+    mark_as_read,
+    mark_all_as_read,
+    delete_notification,
+)
+
+from .activity_models import (
+    get_my_posts,
+    get_my_comments,
+    get_my_likes,
+)
+
+from .category_models import (
+    Category,
+    get_all_categories,
+    get_category_by_id,
+)
+
+from .report_models import (
+    Report,
+    create_report,
+    get_reports,
+    get_reports_count,
+    get_report_by_id,
+    resolve_report,
 )
 
 __all__ = [
     # 사용자 모델
     "User",
-    "get_users",
     "get_user_by_id",
     "get_user_by_email",
     "get_user_by_nickname",
@@ -95,6 +129,32 @@ __all__ = [
     "get_refresh_token",
     "delete_refresh_token",
     "rotate_refresh_token",
-    "delete_user_refresh_tokens",
     "cleanup_expired_tokens",
+    # 이메일 인증 토큰 모델
+    "create_verification_token",
+    "verify_token",
+    "is_user_verified",
+    "cleanup_expired_verification_tokens",
+    # 알림 모델
+    "create_notification",
+    "get_notifications",
+    "get_unread_count",
+    "mark_as_read",
+    "mark_all_as_read",
+    "delete_notification",
+    # 내 활동 모델
+    "get_my_posts",
+    "get_my_comments",
+    "get_my_likes",
+    # 카테고리 모델
+    "Category",
+    "get_all_categories",
+    "get_category_by_id",
+    # 신고 모델
+    "Report",
+    "create_report",
+    "get_reports",
+    "get_reports_count",
+    "get_report_by_id",
+    "resolve_report",
 ]

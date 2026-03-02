@@ -79,7 +79,8 @@ async def test_post_crud_flow(client: AsyncClient, authorized_user):
     post_payload = {
         "title": "Test Title",
         "content": "Test Content",
-        "image_url": "http://example.com/img.jpg"
+        "image_url": "/uploads/images/test_img.jpg",
+        "category_id": 1,
     }
     create_res = await cli.post("/v1/posts/", json=post_payload)
     assert create_res.status_code == 201
@@ -108,7 +109,7 @@ async def test_post_crud_flow(client: AsyncClient, authorized_user):
 @pytest.mark.asyncio
 async def test_post_02_unauthorized_create(client: AsyncClient):
     """POST-02: 비로그인 게시글 작성 실패"""
-    res = await client.post("/v1/posts/", json={"title": "Test Title", "content": "Content"})
+    res = await client.post("/v1/posts/", json={"title": "Test Title", "content": "Content", "category_id": 1})
     assert res.status_code == 401
 
 @pytest.mark.asyncio
@@ -116,7 +117,7 @@ async def test_post_06_forbidden_update(client: AsyncClient, authorized_user, fa
     """POST-06: 타인의 게시글 수정 실패"""
     cli1, user1, _ = authorized_user
 
-    res = await cli1.post("/v1/posts/", json={"title": "User1 Post", "content": "c"})
+    res = await cli1.post("/v1/posts/", json={"title": "User1 Post", "content": "Content", "category_id": 1})
     post_id = res.json()["data"]["post_id"]
 
     user2_payload = {
@@ -145,7 +146,7 @@ async def test_comment_flow(client: AsyncClient, authorized_user):
     """CMT-01 ~ CMT-03 통합 시나리오"""
     cli, _, _ = authorized_user
     
-    post_res = await cli.post("/v1/posts/", json={"title": "Post Title", "content": "Content"})
+    post_res = await cli.post("/v1/posts/", json={"title": "Post Title", "content": "Content", "category_id": 1})
     post_id = post_res.json()["data"]["post_id"]
     
     cmt_res = await cli.post(f"/v1/posts/{post_id}/comments", json={"content": "Comment 1"})
@@ -167,7 +168,7 @@ async def test_like_flow(client: AsyncClient, authorized_user):
     """LIKE-01, LIKE-02 통합 시나리오"""
     cli, _, _ = authorized_user
     
-    post_res = await cli.post("/v1/posts/", json={"title": "Like Test", "content": "C"})
+    post_res = await cli.post("/v1/posts/", json={"title": "Like Test", "content": "Content", "category_id": 1})
     post_id = post_res.json()["data"]["post_id"]
     
     like_res = await cli.post(f"/v1/posts/{post_id}/likes")
@@ -193,9 +194,10 @@ async def test_user_management(client: AsyncClient, authorized_user):
     nick = data.get("user", {}).get("nickname") or data.get("nickname")
     assert nick == new_nick
     
-    # [수정] 비밀번호 변경 스키마 맞춤 (ChangePasswordRequest: new_password, new_password_confirm)
+    # 비밀번호 변경 (현재 비밀번호 검증 포함)
     new_pw = "NewPass123!"
     pw_res = await cli.put("/v1/users/me/password", json={
+        "current_password": user_payload["password"],
         "new_password": new_pw,
         "new_password_confirm": new_pw
     })
