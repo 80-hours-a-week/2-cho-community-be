@@ -21,15 +21,14 @@ async def create_refresh_token(
         expires_at: 만료 시간.
     """
     token_hash = hash_refresh_token(raw_token)
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                INSERT INTO refresh_token (user_id, token_hash, expires_at)
-                VALUES (%s, %s, %s)
-                """,
-                (user_id, token_hash, expires_at),
-            )
+    async with transactional() as cur:
+        await cur.execute(
+            """
+            INSERT INTO refresh_token (user_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (user_id, token_hash, expires_at),
+        )
 
 
 async def get_refresh_token(raw_token: str) -> dict | None:
