@@ -208,6 +208,7 @@ class PostService:
             "post_id": updated_post.id,
             "title": updated_post.title,
             "content": updated_post.content,
+            "updated_at": format_datetime(updated_post.updated_at),
         }
 
     @staticmethod
