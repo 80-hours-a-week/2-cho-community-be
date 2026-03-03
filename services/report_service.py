@@ -25,7 +25,7 @@ class ReportService:
             post_target = await post_models.get_post_by_id(target_id)
             if not post_target:
                 raise not_found_error("post", timestamp)
-            if post_target.author_id == reporter_id:
+            if post_target.author_id is not None and post_target.author_id == reporter_id:
                 raise bad_request_error(
                     "cannot_report_own_content",
                     timestamp,
@@ -35,7 +35,7 @@ class ReportService:
             comment_target = await comment_models.get_comment_by_id(target_id)
             if not comment_target:
                 raise not_found_error("comment", timestamp)
-            if comment_target.author_id == reporter_id:
+            if comment_target.author_id is not None and comment_target.author_id == reporter_id:
                 raise bad_request_error(
                     "cannot_report_own_content",
                     timestamp,

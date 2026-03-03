@@ -89,8 +89,8 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 7
 
-    # 프로덕션에서는 False로 설정하여 상세 에러 메시지 노출 방지
-    DEBUG: bool = True
+    # 로컬 개발 시 .env에서 DEBUG=True로 설정. 기본값 False로 프로덕션 안전성 보장
+    DEBUG: bool = False
 
     IMAGE_UPLOAD_DIR: str = "assets/posts"
     PROFILE_IMAGE_UPLOAD_DIR: str = "assets/profiles"

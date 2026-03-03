@@ -151,9 +151,8 @@ async def create_comment(
     try:
         from models import notification_models
 
-        if comment.parent_id:
-            # 대댓글 → 부모 댓글 작성자에게 알림
-            parent_comment = await comment_models.get_comment_by_id(comment.parent_id)
+        if comment.parent_id and parent_id is not None:
+            # 대댓글 → 부모 댓글 작성자에게 알림 (이미 조회한 parent_comment 재사용)
             if parent_comment and parent_comment.author_id:
                 await notification_models.create_notification(
                     user_id=parent_comment.author_id,

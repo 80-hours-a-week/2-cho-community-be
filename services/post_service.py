@@ -190,8 +190,8 @@ class PostService:
 
         # 4. 다중 이미지 처리
         effective_image_url = image_url
-        if image_urls is not None:
-            effective_image_url = image_urls[0] if image_urls else image_url
+        if image_urls is not None and len(image_urls) > 0:
+            effective_image_url = image_urls[0]
             await post_models.save_post_images(post_id, image_urls)
 
         # 5. DB 업데이트
