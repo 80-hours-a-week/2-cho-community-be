@@ -105,6 +105,7 @@ async def get_optional_user(request: Request) -> User | None:
     """선택적으로 현재 사용자를 추출합니다.
 
     인증되지 않은 요청에서도 에러를 발생시키지 않고 None을 반환합니다.
+    정지된 사용자의 403 에러는 전파합니다.
 
     Args:
         request: FastAPI Request 객체.
@@ -114,7 +115,9 @@ async def get_optional_user(request: Request) -> User | None:
     """
     try:
         return await _validate_token(request)
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            raise  # 정지된 사용자 에러는 전파
         return None
 
 

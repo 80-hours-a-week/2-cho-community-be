@@ -83,7 +83,8 @@ def _row_to_user(row: tuple) -> User:
     """데이터베이스 행을 User 객체로 변환합니다.
 
     Args:
-        row: (id, email, email_verified, nickname, password, profile_img, created_at, updated_at, deleted_at)
+        row: (id, email, email_verified, nickname, password, profile_img, role,
+              suspended_until, suspended_reason, created_at, updated_at, deleted_at)
 
     Returns:
         User 객체.
