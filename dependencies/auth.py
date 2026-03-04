@@ -55,6 +55,21 @@ async def _validate_token(request: Request) -> User | None:
             },
         )
 
+    # 정지된 사용자는 API 접근 차단
+    if user.is_suspended:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "account_suspended",
+                "message": "계정이 정지되었습니다.",
+                "suspended_until": user.suspended_until.strftime("%Y-%m-%dT%H:%M:%SZ") if user.suspended_until else None,
+                "suspended_reason": user.suspended_reason,
+                "timestamp": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ),
+            },
+        )
+
     return user
 
 
