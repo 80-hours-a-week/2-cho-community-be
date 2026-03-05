@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from controllers.user_controller import search_users
+from controllers.user_controller import get_user, search_users
 from models.user_models import get_user_stats, search_users_by_nickname
 
 
@@ -188,3 +188,30 @@ class TestSearchUsersController:
         # search_users_by_nickname에 전달된 limit이 20인지 확인
         call_kwargs = mock_search.call_args
         assert call_kwargs[1]["limit"] == 20
+
+
+class TestGetUserProfileStats:
+    """공개 프로필 응답에 활동 통계가 포함되는지 테스트."""
+
+    @pytest.mark.asyncio
+    @patch("controllers.user_controller.user_models.get_user_stats", new_callable=AsyncMock)
+    @patch("controllers.user_controller.UserService.get_user_by_id", new_callable=AsyncMock)
+    async def test_public_profile_includes_stats(self, mock_get_user, mock_stats):
+        """비인증 공개 프로필 응답에 활동 통계가 포함된다."""
+        user = MagicMock()
+        user.id = 2
+        user.nickname = "대상유저"
+        user.profileImageUrl = "/img/default.jpg"
+
+        mock_get_user.return_value = user
+        mock_stats.return_value = {
+            "posts_count": 10,
+            "comments_count": 20,
+            "likes_received_count": 30,
+        }
+
+        result = await get_user(user_id=2, request=_make_request())
+
+        assert result["data"]["user"]["posts_count"] == 10
+        assert result["data"]["user"]["comments_count"] == 20
+        assert result["data"]["user"]["likes_received_count"] == 30
