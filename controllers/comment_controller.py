@@ -171,6 +171,32 @@ async def create_comment(
                     actor_id=current_user.id,
                     comment_id=comment.id,
                 )
+
+        # 멘션 알림 — 이미 comment 알림을 받은 사용자는 제외
+        from utils.mention import extract_mentions
+        from models.user_models import get_user_by_nickname
+
+        already_notified = {current_user.id}  # 자기 자신 제외
+        # 기존 comment 알림 수신자 추가
+        if comment.parent_id and parent_id is not None:
+            if parent_comment and parent_comment.author_id:
+                already_notified.add(parent_comment.author_id)
+        else:
+            if post.author_id:
+                already_notified.add(post.author_id)
+
+        nicknames = extract_mentions(comment_data.content)
+        for nickname in nicknames:
+            mentioned_user = await get_user_by_nickname(nickname)
+            if mentioned_user and mentioned_user.id not in already_notified:
+                already_notified.add(mentioned_user.id)
+                await notification_models.create_notification(
+                    user_id=mentioned_user.id,
+                    notification_type="mention",
+                    post_id=post_id,
+                    actor_id=current_user.id,
+                    comment_id=comment.id,
+                )
     except Exception:
         import logging
 
