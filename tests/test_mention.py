@@ -1,5 +1,10 @@
-"""test_mention: 멘션 파싱 유틸리티 테스트."""
+"""test_mention: 멘션 파싱 유틸리티 및 알림 통합 테스트."""
 
+import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
+
+from controllers.comment_controller import create_comment
+from schemas.comment_schemas import CreateCommentRequest
 from utils.mention import extract_mentions
 
 
@@ -28,12 +33,6 @@ class TestExtractMentions:
 
     def test_mention_at_end(self):
         assert extract_mentions("안녕하세요 @유저") == ["유저"]
-
-
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from controllers.comment_controller import create_comment
-from schemas.comment_schemas import CreateCommentRequest
 
 
 class TestMentionNotification:
