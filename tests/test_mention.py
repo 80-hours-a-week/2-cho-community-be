@@ -79,7 +79,7 @@ class TestMentionNotification:
             # comment 알림 (게시글 작성자) + mention 알림 (멘션된 사용자)
             assert mock_notify.call_count == 2
             mention_call = mock_notify.call_args_list[1]
-            assert mention_call.kwargs.get("notification_type") == "mention" or mention_call[1].get("notification_type") == "mention"
+            assert mention_call.kwargs["notification_type"] == "mention"
 
     @pytest.mark.asyncio
     async def test_mention_self_excluded(self):
