@@ -1,6 +1,7 @@
 """notification_controller: 알림 관련 컨트롤러."""
 
 from fastapi import Request
+from fastapi.responses import JSONResponse, Response
 
 from dependencies.request_context import get_request_timestamp
 from models import notification_models
@@ -29,15 +30,33 @@ async def get_notifications(
     )
 
 
-async def get_unread_count(current_user: User, request: Request) -> dict:
-    """읽지 않은 알림 수를 조회합니다."""
+async def get_unread_count(
+    current_user: User, request: Request
+) -> JSONResponse | Response:
+    """읽지 않은 알림 수 + 최신 알림 1건을 조회합니다.
+
+    ETag 기반 캐싱: unread_count와 latest.notification_id로 ETag 생성.
+    변경 없으면 304 Not Modified 반환하여 응답 크기 절감.
+    """
+    result = await notification_models.get_unread_count_with_latest(current_user.id)
+
+    # ETag: count + 최신 알림 ID 조합
+    latest_id = result["latest"]["notification_id"] if result["latest"] else 0
+    etag = f'W/"{current_user.id}-{result["unread_count"]}-{latest_id}"'
+
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+
     timestamp = get_request_timestamp(request)
-    count = await notification_models.get_unread_count(current_user.id)
-    return create_response(
+    body = create_response(
         "UNREAD_COUNT",
         "읽지 않은 알림 수를 조회했습니다.",
-        data={"unread_count": count},
+        data=result,
         timestamp=timestamp,
+    )
+    return JSONResponse(
+        content=body,
+        headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
 
 
