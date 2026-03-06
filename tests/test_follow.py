@@ -13,7 +13,7 @@ async def _create_second_user(client):
     payload = {
         "email": "follow_target@test.com",
         "password": "Password123!",
-        "nickname": "FollowTarget",
+        "nickname": "FTarget",
     }
     await client.post("/v1/users/", data=payload)
 
@@ -174,7 +174,7 @@ async def test_follow_10_notification_on_new_post(client, authorized_user):
         notifications = notif_res.json()["data"]["notifications"]
         follow_notifs = [n for n in notifications if n["type"] == "follow"]
         assert len(follow_notifs) >= 1
-        assert follow_notifs[0]["actor"]["nickname"] == "FollowTarget"
+        assert follow_notifs[0]["actor"]["nickname"] == "FTarget"
 
 
 @pytest.mark.asyncio
