@@ -17,6 +17,9 @@ async def clear_all_data() -> None:
     async with get_connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+            await cur.execute("TRUNCATE TABLE poll_vote")
+            await cur.execute("TRUNCATE TABLE poll_option")
+            await cur.execute("TRUNCATE TABLE poll")
             await cur.execute("TRUNCATE TABLE report")
             await cur.execute("TRUNCATE TABLE notification")
             await cur.execute("TRUNCATE TABLE image")
@@ -31,6 +34,7 @@ async def clear_all_data() -> None:
             await cur.execute("TRUNCATE TABLE post")
             await cur.execute("TRUNCATE TABLE tag")
             await cur.execute("TRUNCATE TABLE user_block")
+            await cur.execute("TRUNCATE TABLE user_follow")
             await cur.execute("TRUNCATE TABLE refresh_token")
             await cur.execute("TRUNCATE TABLE category")
             await cur.execute("TRUNCATE TABLE user")

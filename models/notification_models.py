@@ -6,7 +6,7 @@ from database.connection import get_connection, transactional
 from schemas.common import build_author_dict
 from utils.formatters import format_datetime
 
-NotificationType = Literal["comment", "like", "mention"]
+NotificationType = Literal["comment", "like", "mention", "follow"]
 
 
 async def create_notification(
@@ -87,6 +87,51 @@ async def get_unread_count(user_id: int) -> int:
                 (user_id,),
             )
             return (await cur.fetchone())[0]
+
+
+async def get_unread_count_with_latest(user_id: int) -> dict:
+    """읽지 않은 알림 수와 최신 알림 1건을 반환합니다.
+
+    폴링 최적화용: 단일 DB 연결에서 count + latest를 모두 조회하여
+    프론트엔드가 추가 API 호출 없이 토스트에 알림 내용을 표시할 수 있습니다.
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COUNT(*) FROM notification WHERE user_id = %s AND is_read = 0",
+                (user_id,),
+            )
+            count = (await cur.fetchone())[0]
+
+            latest = None
+            if count > 0:
+                await cur.execute(
+                    """
+                    SELECT n.id, n.type, n.post_id, n.comment_id, n.created_at,
+                           u.nickname AS actor_nickname,
+                           p.title AS post_title
+                    FROM notification n
+                    LEFT JOIN user u ON n.actor_id = u.id
+                    LEFT JOIN post p ON n.post_id = p.id
+                    WHERE n.user_id = %s AND n.is_read = 0
+                    ORDER BY n.created_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id,),
+                )
+                row = await cur.fetchone()
+                if row:
+                    latest = {
+                        "notification_id": row[0],
+                        "type": row[1],
+                        "post_id": row[2],
+                        "comment_id": row[3],
+                        "created_at": format_datetime(row[4]),
+                        "actor_nickname": row[5] or "탈퇴한 사용자",
+                        "post_title": row[6] or "삭제된 게시글",
+                    }
+
+    return {"unread_count": count, "latest": latest}
 
 
 async def mark_as_read(notification_id: int, user_id: int) -> bool:

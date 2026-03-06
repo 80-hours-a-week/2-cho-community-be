@@ -120,7 +120,7 @@ CREATE TABLE post_view_log (
 CREATE TABLE notification (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
-    type ENUM('comment', 'like', 'mention') NOT NULL,
+    type ENUM('comment', 'like', 'mention', 'follow') NOT NULL,
     post_id INT UNSIGNED NOT NULL,
     comment_id INT UNSIGNED NULL,
     actor_id INT UNSIGNED NOT NULL,
@@ -181,6 +181,17 @@ CREATE TABLE user_block (
     FOREIGN KEY (blocked_id) REFERENCES user (id) ON DELETE CASCADE
 );
 
+-- 팔로우 테이블
+CREATE TABLE user_follow (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    follower_id INT UNSIGNED NOT NULL,
+    following_id INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_follow (follower_id, following_id),
+    FOREIGN KEY (follower_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (following_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
 -- 게시글 이미지 테이블 (다중 이미지)
 CREATE TABLE post_image (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -189,6 +200,38 @@ CREATE TABLE post_image (
     sort_order TINYINT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE
+);
+
+-- 투표 테이블
+CREATE TABLE poll (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    post_id INT UNSIGNED NOT NULL UNIQUE,
+    question VARCHAR(200) NOT NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+);
+
+-- 투표 선택지 테이블
+CREATE TABLE poll_option (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    poll_id INT UNSIGNED NOT NULL,
+    option_text VARCHAR(100) NOT NULL,
+    sort_order TINYINT UNSIGNED DEFAULT 0,
+    FOREIGN KEY (poll_id) REFERENCES poll(id) ON DELETE CASCADE
+);
+
+-- 투표 참여 테이블
+CREATE TABLE poll_vote (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    poll_id INT UNSIGNED NOT NULL,
+    option_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_vote (poll_id, user_id),
+    FOREIGN KEY (poll_id) REFERENCES poll(id) ON DELETE CASCADE,
+    FOREIGN KEY (option_id) REFERENCES poll_option(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 );
 
     -- 태그 테이블
@@ -270,9 +313,19 @@ CREATE TABLE post_tag (
     CREATE INDEX idx_user_block_blocker ON user_block (blocker_id);
     CREATE INDEX idx_user_block_blocked ON user_block (blocked_id);
 
-    -- 19. 게시글 이미지 인덱스
+    -- 19. 팔로우 인덱스
+    CREATE INDEX idx_user_follow_follower ON user_follow(follower_id);
+    CREATE INDEX idx_user_follow_following ON user_follow(following_id);
+
+    -- 20. 게시글 이미지 인덱스
     CREATE INDEX idx_post_image_post ON post_image (post_id, sort_order);
 
-    -- 20. 정지 사용자 조회
+    -- 21. 정지 사용자 조회
     CREATE INDEX idx_user_suspended ON user (suspended_until);
+
+    -- 21. 투표 인덱스
+    CREATE INDEX idx_poll_post ON poll(post_id);
+    CREATE INDEX idx_poll_option_poll ON poll_option(poll_id);
+    CREATE INDEX idx_poll_vote_poll ON poll_vote(poll_id);
+    CREATE INDEX idx_poll_vote_user ON poll_vote(user_id);
 
