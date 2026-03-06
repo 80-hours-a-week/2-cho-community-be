@@ -145,9 +145,9 @@ async def test_follow_09_follow_counts_in_profile(client, authorized_user):
         await cli.post(f"/v1/users/{target_id}/follow")
         res = await cli.get(f"/v1/users/{target_id}")
         assert res.status_code == 200
-        data = res.json()["data"]
-        assert "followers_count" in data
-        assert data["followers_count"] == 1
+        user = res.json()["data"]["user"]
+        assert "followers_count" in user
+        assert user["followers_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -193,4 +193,4 @@ async def test_follow_12_is_following_in_profile(client, authorized_user):
         await cli.post(f"/v1/users/{target_id}/follow")
         res = await cli.get(f"/v1/users/{target_id}")
         assert res.status_code == 200
-        assert res.json()["data"]["is_following"] is True
+        assert res.json()["data"]["user"]["is_following"] is True
