@@ -3,7 +3,7 @@
 import logging
 
 from typing import List, Dict, Tuple, Optional
-from models import post_models, tag_models, follow_models, notification_models
+from models import post_models, tag_models, poll_models, follow_models, notification_models
 from models.user_models import User
 from models.like_models import get_like
 from models.bookmark_models import get_bookmark
@@ -125,6 +125,11 @@ class PostService:
         # 태그 목록 조회
         post_data["tags"] = await tag_models.get_post_tags(post_id)
 
+        # 투표 데이터 조회
+        post_data["poll"] = await poll_models.get_poll_by_post_id(
+            post_id, current_user_id=current_user.id if current_user else None
+        )
+
         # 5. 댓글 목록 조회
         comments_data = await post_models.get_comments_with_author(
             post_id,
@@ -187,6 +192,15 @@ class PostService:
             tag_ids = await tag_models.get_or_create_tags(post_data.tags)
             await tag_models.save_post_tags(post.id, tag_ids)
 
+        # 투표 생성
+        if post_data.poll:
+            await poll_models.create_poll(
+                post_id=post.id,
+                question=post_data.poll.question,
+                options=post_data.poll.options,
+                expires_at=post_data.poll.expires_at,
+            )
+
         # 팔로워에게 새 게시글 알림 (실패해도 게시글 생성은 유지)
         try:
             follower_ids = await follow_models.get_follower_ids(user_id)
@@ -198,7 +212,9 @@ class PostService:
                     actor_id=user_id,
                 )
         except Exception:
-            logging.getLogger(__name__).warning("팔로우 알림 생성 실패", exc_info=True)
+            logging.getLogger(__name__).warning(
+                "팔로우 알림 생성 실패", exc_info=True
+            )
 
         return post.id
 
