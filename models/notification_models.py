@@ -18,11 +18,15 @@ async def create_notification(
     post_id: int,
     actor_id: int,
     comment_id: int | None = None,
+    actor_nickname: str | None = None,
 ) -> None:
     """알림을 생성하고 WebSocket으로 실시간 전송합니다.
 
     자기 자신에 대한 알림은 생성하지 않습니다.
     WebSocket 전송은 best-effort — 실패해도 DB 저장에 영향 없습니다.
+
+    Args:
+        actor_nickname: 호출부에서 이미 알고 있는 경우 전달하면 DB 조회 생략.
     """
     if user_id == actor_id:
         return
@@ -43,17 +47,17 @@ async def create_notification(
         try:
             from utils.websocket_pusher import push_to_user
 
-            # 토스트 메시지에 닉네임을 표시하기 위해 actor 정보 조회
-            actor_nickname = None
-            async with get_connection() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        "SELECT nickname FROM user WHERE id = %s AND deleted_at IS NULL",
-                        (actor_id,),
-                    )
-                    row = await cur.fetchone()
-                    if row:
-                        actor_nickname = row[0]
+            # 닉네임이 전달되지 않은 경우에만 DB 조회
+            if actor_nickname is None:
+                async with get_connection() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            "SELECT nickname FROM user WHERE id = %s AND deleted_at IS NULL",
+                            (actor_id,),
+                        )
+                        row = await cur.fetchone()
+                        if row:
+                            actor_nickname = row[0]
 
             await push_to_user(user_id, {
                 "type": "notification",

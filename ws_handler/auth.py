@@ -2,6 +2,11 @@
 
 FastAPI/Pydantic 의존성 없이 JWT Access Token을 검증합니다.
 SECRET_KEY는 SSM Parameter Store에서 콜드 스타트 시 1회 조회합니다.
+
+주의: 계정 정지(suspended_until) 검증은 수행하지 않습니다.
+WebSocket Lambda는 DynamoDB만 사용하며 MySQL 접근이 없으므로,
+정지된 사용자가 Access Token 만료(최대 30분)까지 알림을 수신할 수 있습니다.
+알림 수신은 읽기 전용이므로 허용 가능한 수준의 제한사항입니다.
 """
 
 import logging

@@ -13,8 +13,8 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-_TABLE_NAME = os.environ.get("DYNAMODB_TABLE", "")
 _dynamodb = None
+_table = None
 
 # 미인증 연결의 placeholder user_id (GSI N 타입 요구사항)
 _UNAUTHENTICATED_USER_ID = 0
@@ -24,11 +24,16 @@ _TTL_SECONDS = 86400
 
 
 def _get_table():
-    """DynamoDB 테이블 리소스를 반환합니다 (지연 초기화)."""
-    global _dynamodb
-    if _dynamodb is None:
-        _dynamodb = boto3.resource("dynamodb")
-    return _dynamodb.Table(_TABLE_NAME)
+    """DynamoDB 테이블 리소스를 반환합니다 (지연 초기화).
+
+    테이블 이름은 호출 시점에 환경변수에서 읽어 테스트 호환성 보장.
+    """
+    global _dynamodb, _table
+    if _table is None:
+        if _dynamodb is None:
+            _dynamodb = boto3.resource("dynamodb")
+        _table = _dynamodb.Table(os.environ.get("DYNAMODB_TABLE", ""))
+    return _table
 
 
 def save_connection(connection_id: str) -> None:

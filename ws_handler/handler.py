@@ -14,21 +14,22 @@ from auth import verify_token
 logger = logging.getLogger(__name__)
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-_WS_API_ENDPOINT = os.environ.get("WS_API_ENDPOINT", "")
-
 # Management API 클라이언트 캐싱 (콜드 스타트 최적화)
 _api_gw_client = None
 
 
 def _get_management_client():
-    """API Gateway Management API 클라이언트를 반환합니다 (지연 초기화)."""
+    """API Gateway Management API 클라이언트를 반환합니다 (지연 초기화).
+
+    WS_API_ENDPOINT를 호출 시점에 읽어 테스트 호환성 보장.
+    """
     global _api_gw_client
     if _api_gw_client is None:
         import boto3
 
         _api_gw_client = boto3.client(
             "apigatewaymanagementapi",
-            endpoint_url=_WS_API_ENDPOINT,
+            endpoint_url=os.environ.get("WS_API_ENDPOINT", ""),
         )
     return _api_gw_client
 

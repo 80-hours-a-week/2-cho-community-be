@@ -1,6 +1,6 @@
 """WebSocket Lambda 핸들러 단위 테스트.
 
-websocket/ 패키지는 별도 Lambda로 배포되므로,
+ws_handler/ 디렉토리는 별도 Lambda로 배포되므로,
 sys.path에 추가하여 import합니다.
 """
 
@@ -11,8 +11,8 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-# websocket/ 디렉토리를 import 경로에 추가
-_ws_dir = str(Path(__file__).resolve().parent.parent / "websocket")
+# ws_handler/ 디렉토리를 import 경로에 추가
+_ws_dir = str(Path(__file__).resolve().parent.parent / "ws_handler")
 if _ws_dir not in sys.path:
     sys.path.insert(0, _ws_dir)
 
