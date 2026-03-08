@@ -43,6 +43,18 @@ async def create_notification(
         try:
             from utils.websocket_pusher import push_to_user
 
+            # 토스트 메시지에 닉네임을 표시하기 위해 actor 정보 조회
+            actor_nickname = None
+            async with get_connection() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "SELECT nickname FROM user WHERE id = %s AND deleted_at IS NULL",
+                        (actor_id,),
+                    )
+                    row = await cur.fetchone()
+                    if row:
+                        actor_nickname = row[0]
+
             await push_to_user(user_id, {
                 "type": "notification",
                 "data": {
@@ -51,6 +63,7 @@ async def create_notification(
                     "post_id": post_id,
                     "comment_id": comment_id,
                     "actor_id": actor_id,
+                    "actor_nickname": actor_nickname or "알 수 없는 사용자",
                 },
             })
         except Exception:
