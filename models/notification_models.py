@@ -1,10 +1,13 @@
 """notification_models: 알림 관련 모델."""
 
+import logging
 from typing import Literal
 
 from database.connection import get_connection, transactional
 from schemas.common import build_author_dict
 from utils.formatters import format_datetime
+
+logger = logging.getLogger(__name__)
 
 NotificationType = Literal["comment", "like", "mention", "follow"]
 
@@ -16,10 +19,15 @@ async def create_notification(
     actor_id: int,
     comment_id: int | None = None,
 ) -> None:
-    """알림을 생성합니다. 자기 자신에 대한 알림은 생성하지 않습니다."""
+    """알림을 생성하고 WebSocket으로 실시간 전송합니다.
+
+    자기 자신에 대한 알림은 생성하지 않습니다.
+    WebSocket 전송은 best-effort — 실패해도 DB 저장에 영향 없습니다.
+    """
     if user_id == actor_id:
         return
 
+    notification_id = None
     async with transactional() as cur:
         await cur.execute(
             """
@@ -28,6 +36,29 @@ async def create_notification(
             """,
             (user_id, notification_type, post_id, comment_id, actor_id),
         )
+        notification_id = cur.lastrowid
+
+    # WebSocket 실시간 푸시 (best-effort, transactional 밖에서 실행)
+    if notification_id:
+        try:
+            from utils.websocket_pusher import push_to_user
+
+            await push_to_user(user_id, {
+                "type": "notification",
+                "data": {
+                    "notification_id": notification_id,
+                    "notification_type": notification_type,
+                    "post_id": post_id,
+                    "comment_id": comment_id,
+                    "actor_id": actor_id,
+                },
+            })
+        except Exception:
+            logger.warning(
+                "WebSocket 푸시 실패 (notification_id=%d)",
+                notification_id,
+                exc_info=True,
+            )
 
 
 async def get_notifications(
