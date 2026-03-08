@@ -11,7 +11,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-# boto3는 Lambda 런타임에만 존재 — CI에서 import 실패 방지를 위해 mock 주입
+# boto3/botocore는 Lambda 런타임에만 존재 — CI에서 import 실패 방지를 위해 mock 주입
+if "botocore" not in sys.modules:
+    _botocore_mock = MagicMock()
+    sys.modules["botocore"] = _botocore_mock
+    sys.modules["botocore.exceptions"] = _botocore_mock.exceptions
 if "boto3" not in sys.modules:
     sys.modules["boto3"] = MagicMock()
 
