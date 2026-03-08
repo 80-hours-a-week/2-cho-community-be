@@ -7,9 +7,13 @@ sys.path에 추가하여 import합니다.
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
+
+# boto3는 Lambda 런타임에만 존재 — CI에서 import 실패 방지를 위해 mock 주입
+if "boto3" not in sys.modules:
+    sys.modules["boto3"] = MagicMock()
 
 # ws_handler/ 디렉토리를 import 경로에 추가
 _ws_dir = str(Path(__file__).resolve().parent.parent / "ws_handler")
