@@ -32,6 +32,7 @@ from mangum import Mangum
 
 
 _TOKEN_CLEANUP_INTERVAL_HOURS = 1
+_FEED_SCORE_INTERVAL_MINUTES = 30
 
 logger = logging.getLogger("api")
 
@@ -56,6 +57,19 @@ async def _periodic_token_cleanup() -> None:
             logger.exception("이메일 인증 토큰 정리 중 오류 발생")
 
 
+async def _periodic_feed_score_refresh() -> None:
+    """추천 피드 점수를 주기적으로 재계산하는 백그라운드 작업."""
+    from services.feed_service import FeedService
+
+    while True:
+        await asyncio.sleep(_FEED_SCORE_INTERVAL_MINUTES * 60)
+        try:
+            result = await FeedService.recompute_all_scores()
+            logger.info("피드 점수 재계산 완료: %s", result)
+        except Exception:
+            logger.exception("피드 점수 재계산 중 오류 발생")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 생명주기 관리.
@@ -66,8 +80,10 @@ async def lifespan(app: FastAPI):
     """
     await init_db()
     cleanup_task = asyncio.create_task(_periodic_token_cleanup())
+    feed_task = asyncio.create_task(_periodic_feed_score_refresh())
     yield
     cleanup_task.cancel()
+    feed_task.cancel()
     await close_db()
 
 
