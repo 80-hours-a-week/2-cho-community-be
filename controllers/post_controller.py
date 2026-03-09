@@ -278,6 +278,44 @@ async def upload_image(
     )
 
 
+async def get_related_posts(
+    post_id: int,
+    request: Request,
+    limit: int = 5,
+    current_user: User | None = None,
+) -> dict:
+    """현재 게시글과 관련된 게시글을 추천합니다.
+
+    Args:
+        post_id: 기준 게시글 ID.
+        request: FastAPI Request 객체.
+        limit: 추천 게시글 수 (1~10, 범위 밖이면 5).
+        current_user: 현재 인증된 사용자 (선택적).
+
+    Returns:
+        연관 게시글 목록이 포함된 응답.
+    """
+    timestamp = get_request_timestamp(request)
+
+    # limit 범위 검증 (1~10, 범위 밖이면 기본값 5)
+    if limit < 1 or limit > 10:
+        limit = 5
+
+    posts = await PostService.get_related_posts(
+        post_id, current_user=current_user, limit=limit,
+    )
+
+    if posts is None:
+        raise not_found_error("post", timestamp)
+
+    return create_response(
+        "RELATED_POSTS_RETRIEVED",
+        "연관 게시글 조회에 성공했습니다.",
+        data={"posts": posts},
+        timestamp=timestamp,
+    )
+
+
 async def pin_post(
     post_id: int,
     _current_user: User,
