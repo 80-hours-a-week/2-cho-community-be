@@ -3,6 +3,7 @@
 JWT Bearer Token 기반 사용자 인증 및 권한 확인 기능을 제공합니다.
 """
 
+import hmac
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, status
@@ -185,7 +186,7 @@ def _is_valid_internal_key(request: Request) -> bool:
     if not settings.INTERNAL_API_KEY:
         return False
     key = request.headers.get("X-Internal-Key", "")
-    return key == settings.INTERNAL_API_KEY
+    return hmac.compare_digest(key, settings.INTERNAL_API_KEY)
 
 
 async def require_internal(request: Request) -> None:
