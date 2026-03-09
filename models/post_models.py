@@ -699,7 +699,7 @@ async def get_related_posts(
                 ORDER BY matched_tags DESC, same_category DESC, hot_score DESC
                 LIMIT %s
                 """,
-                [*tag_params, *cat_params, *params],
+                [*cat_params, *tag_params, *params],
             )
             rows = await cur.fetchall()
 
