@@ -102,7 +102,10 @@ def _handle_typing(connection_id: str, body: dict, msg_type: str) -> dict:
     if not sender_id:
         return {"statusCode": 401}
 
-    # 상대방 user_id는 클라이언트가 전달 (DynamoDB에서 대화 정보 미저장)
+    # 보안 참고: 상대방 user_id는 클라이언트가 전달 (DynamoDB에서 대화 참여자 미저장).
+    # 대화 참여자 검증 없이 타이핑 이벤트를 중계하므로,
+    # 악의적 클라이언트가 임의 recipient_id로 타이핑 인디케이터를 보낼 수 있음.
+    # 내용 노출은 없으므로 낮은 위험으로 수용 (향후 DynamoDB에 참여자 캐싱으로 개선 가능).
     try:
         recipient_id = int(body.get("recipient_id", ""))
     except (TypeError, ValueError):

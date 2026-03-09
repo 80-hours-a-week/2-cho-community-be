@@ -177,14 +177,7 @@ async def get_conversations(
                           AND m.sender_id != %s
                           AND m.is_read = 0
                           AND m.deleted_at IS NULL
-                    ) AS unread_count,
-                    (
-                        SELECT m.deleted_at IS NOT NULL
-                        FROM dm_message m
-                        WHERE m.conversation_id = c.id
-                        ORDER BY m.created_at DESC
-                        LIMIT 1
-                    ) AS last_msg_deleted
+                    ) AS unread_count
                 FROM dm_conversation c
                 JOIN user u ON u.id = IF(
                     c.participant1_id = %s,
@@ -207,7 +200,10 @@ async def get_conversations(
 
         last_content = row[7]
         last_sender_id = row[8]
-        last_msg_deleted = bool(row[10])
+
+        # last_content가 None이고 last_sender_id가 있으면 삭제된 메시지
+        # (IF(deleted_at IS NULL, content, NULL) 서브쿼리에서 삭제 시 NULL 반환)
+        last_msg_deleted = last_sender_id is not None and last_content is None
 
         # 마지막 메시지 내용 100자 truncate (삭제된 메시지는 content=None)
         last_message = None

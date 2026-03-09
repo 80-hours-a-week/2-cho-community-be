@@ -82,7 +82,8 @@ def get_user_id_for_connection(connection_id: str) -> int | None:
     if not item or not item.get("authenticated"):
         return None
     user_id = item.get("user_id", _UNAUTHENTICATED_USER_ID)
-    return user_id if user_id != _UNAUTHENTICATED_USER_ID else None
+    # DynamoDB는 숫자를 Decimal로 반환 — int 변환 필수 (JSON 직렬화 호환)
+    return int(user_id) if user_id != _UNAUTHENTICATED_USER_ID else None
 
 
 def get_connections_for_user(user_id: int) -> list[str]:
