@@ -31,6 +31,7 @@ ALLOWED_SORT_OPTIONS = {
     "views": "p.views DESC, p.created_at DESC",
     "comments": "comments_count DESC, p.created_at DESC",
     "hot": "hot_score DESC, p.created_at DESC",
+    "for_you": "COALESCE(upc.combined_score, 0) DESC, p.created_at DESC",
 }
 
 
@@ -369,6 +370,7 @@ async def get_posts_with_details(
     blocked_user_ids: set[int] | None = None,
     tag: str | None = None,
     author_ids: set[int] | None = None,
+    current_user_id: int | None = None,
 ) -> list[dict]:
     """게시글 목록을 작성자 정보, 좋아요 수, 댓글 수, 북마크 수와 함께 조회합니다.
 
@@ -425,6 +427,17 @@ async def get_posts_with_details(
         where += " AND EXISTS (SELECT 1 FROM post_tag pt INNER JOIN tag t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name = %s)"
         params.append(tag)
 
+    # 추천 피드 JOIN 처리 (current_user_id 없으면 latest 폴백)
+    upc_join = ""
+    upc_select = ""
+    join_params: list = []
+    if sort == "for_you" and current_user_id is not None:
+        upc_join = "LEFT JOIN user_post_score upc ON p.id = upc.post_id AND upc.user_id = %s"
+        upc_select = ", COALESCE(upc.combined_score, 0) AS combined_score"
+        join_params = [current_user_id]
+    elif sort == "for_you":
+        sort = "latest"
+
     params.extend([limit, offset])
 
     async with get_connection() as conn:
@@ -444,6 +457,7 @@ async def get_posts_with_details(
                      + p.views * 0.5)
                     / POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.5)
                     AS hot_score
+                    {upc_select}
                 FROM post p
                 LEFT JOIN user u ON p.author_id = u.id
                 LEFT JOIN category cat ON p.category_id = cat.id
@@ -463,11 +477,12 @@ async def get_posts_with_details(
                     FROM post_bookmark
                     GROUP BY post_id
                 ) bk ON p.id = bk.post_id
+                {upc_join}
                 WHERE {where}
                 ORDER BY p.is_pinned DESC, {order_by}
                 LIMIT %s OFFSET %s
                 """,
-                params,
+                [*join_params, *params],
             )
             rows = await cur.fetchall()
 

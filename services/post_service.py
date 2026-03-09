@@ -43,18 +43,37 @@ class PostService:
             if not author_ids:
                 return ([], 0, False)
 
+        # 추천 피드 cold start 처리
+        effective_sort = sort
+        if sort == "for_you":
+            if not current_user:
+                effective_sort = "latest"
+            else:
+                from models.affinity_models import user_has_scores
+                if not await user_has_scores(current_user.id):
+                    effective_sort = "latest"
+
+        # 추천 피드: 다양성 필터 여유분 확보
+        fetch_limit = limit * 3 if effective_sort == "for_you" else limit
+
         # 1. DB 조회
         posts_data = await post_models.get_posts_with_details(
-            offset, limit, search=search, sort=sort,
+            offset, fetch_limit, search=search, sort=effective_sort,
             author_id=author_id, category_id=category_id,
             blocked_user_ids=blocked_ids, tag=tag,
             author_ids=author_ids,
+            current_user_id=current_user.id if current_user and effective_sort == "for_you" else None,
         )
         total_count = await post_models.get_total_posts_count(
             search=search, author_id=author_id, category_id=category_id,
             blocked_user_ids=blocked_ids, tag=tag,
             author_ids=author_ids,
         )
+
+        # 추천 피드 다양성 필터: 작성자당 최대 3개
+        if effective_sort == "for_you":
+            posts_data = PostService._apply_diversity_cap(posts_data, limit)
+
         has_more = offset + limit < total_count
 
         # 2. 데이터 가공 (날짜 포맷, 내용 요약)
@@ -82,6 +101,27 @@ class PostService:
                 post["is_read"] = False
 
         return posts_data, total_count, has_more
+
+    @staticmethod
+    def _apply_diversity_cap(
+        posts: list[dict],
+        limit: int,
+        max_per_author: int = 3,
+    ) -> list[dict]:
+        """동일 작성자 게시글을 페이지당 최대 N개로 제한합니다."""
+        author_count: dict[int | None, int] = {}
+        result: list[dict] = []
+        for post in posts:
+            author_id = (post.get("author") or {}).get("user_id")
+            count = author_count.get(author_id, 0)
+            if author_id is not None and count >= max_per_author:
+                continue
+            if author_id is not None:
+                author_count[author_id] = count + 1
+            result.append(post)
+            if len(result) >= limit:
+                break
+        return result
 
     @staticmethod
     async def get_post_detail(

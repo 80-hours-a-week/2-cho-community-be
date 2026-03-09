@@ -358,3 +358,17 @@ CREATE TABLE dm_message (
     INDEX idx_msg_unread (conversation_id, sender_id, is_read)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 추천 피드 점수 테이블 (배치 재계산, 30분 주기)
+CREATE TABLE user_post_score (
+    user_id         INT UNSIGNED NOT NULL,
+    post_id         INT UNSIGNED NOT NULL,
+    affinity_score  FLOAT NOT NULL DEFAULT 0.0,
+    hot_score       FLOAT NOT NULL DEFAULT 0.0,
+    combined_score  FLOAT NOT NULL DEFAULT 0.0,
+    computed_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, post_id),
+    INDEX idx_ups_user_combined (user_id, combined_score DESC),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
