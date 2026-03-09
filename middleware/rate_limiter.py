@@ -57,7 +57,8 @@ def _create_rate_limiter() -> RateLimiterProtocol:
         return MemoryRateLimiter()
 
     if backend == "dynamodb":
-        raise NotImplementedError("DynamoDB Rate Limiter는 아직 구현되지 않았습니다.")
+        from middleware.rate_limiter_dynamodb import DynamoDBRateLimiter
+        return DynamoDBRateLimiter()
 
     raise ValueError(f"지원하지 않는 Rate Limiter 백엔드: {backend}")
 
