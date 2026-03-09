@@ -1,72 +1,74 @@
-# 2-cho-community-be
-AWS AI School 2기 과제: 커뮤니티 백엔드 서버
+# 아무 말 대잔치 — Backend
 
-## 요약 (Summary)
+> 커뮤니티 포럼 "아무 말 대잔치"의 백엔드 서버. **FastAPI** + **MySQL** + **aiomysql** 기반 비동기 REST API.
 
-커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글(대댓글 포함), 좋아요, 북마크, 댓글 좋아요, 검색/정렬(인기순 포함), 다중 이미지, 사용자 차단, 공유, 이메일 인증, 실시간 알림(WebSocket), 내 활동 조회, 사용자 프로필, 계정 정지(관리자), 태그 시스템, 읽은 게시글 표시, 팔로우/팔로잉, 관리자 대시보드, 투표(Poll) 기능을 제공합니다.
+**Tech Stack**: Python 3.11+ · FastAPI · MySQL 8.0+ · aiomysql · JWT · Pydantic · Locust
 
-## 배경 (Background)
+### 주요 기능
 
-AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해야 합니다. 수강생들이 자유롭게 소통할 수 있는 공간이 필요하며, 실무에서 자주 사용되는 기술 스택(FastAPI, MySQL, Vanilla JS)을 학습하고 적용하는 것이 목표입니다.
+- **게시글 CRUD** — 카테고리, 태그(최대 5개), 다중 이미지(최대 5개), 마크다운, 투표(Poll), 인기순(Hot) 정렬, FULLTEXT 검색(ngram)
+- **댓글 시스템** — 1단계 대댓글, 댓글 좋아요, @멘션 알림
+- **인증/보안** — JWT 이중 토큰(Access 30분 + Refresh 7일), 이메일 인증, 계정 정지, 정보 열거 방지
+- **소셜 기능** — 팔로우/팔로잉, 팔로잉 피드, DM 쪽지, 사용자 차단, 북마크
+- **실시간 알림** — WebSocket (API Gateway + Lambda + DynamoDB), 폴링 폴백
+- **관리자** — 신고 관리, 계정 정지, 게시글 고정, 대시보드 통계
+- **인프라** — AWS Lambda 컨테이너 배포, Blue/Green (Alias 기반), Locust 부하 테스트
 
-기존에 별도의 커뮤니티 플랫폼이 없어 수강생 간 교류가 제한적이었습니다. 이 서비스를 통해 학습 경험을 공유하고, 질문/답변을 주고받으며, 프로젝트 협업의 기회를 마련하고자 합니다.
+---
 
-## 목표 (Goals)
-
-- 회원가입, 로그인, 로그아웃, 회원 탈퇴 기능을 제공한다.
-- 게시글 작성, 조회, 수정, 삭제(CRUD) 기능을 제공한다.
-- 댓글 작성, 수정, 삭제 기능을 제공한다. (1단계 대댓글 지원)
-- 게시글 검색(제목+내용 FULLTEXT) 및 정렬(최신순/좋아요순/조회수순/댓글순) 기능을 제공한다.
-- 게시글 좋아요/좋아요 취소 기능을 제공한다.
-- 게시글 북마크 기능을 제공한다. (북마크 추가/해제, 내 북마크 목록 조회)
-- 댓글 좋아요 기능을 제공한다. (댓글별 좋아요 수 표시, is_liked 상태)
-- 게시글 공유 기능을 제공한다. (Web Share API 또는 클립보드 복사)
-- 사용자 차단 기능을 제공한다. (차단된 사용자의 게시글/댓글 숨김)
-- 다중 이미지 업로드 기능을 제공한다. (게시글당 최대 5개, 기존 단일 이미지 하위 호환)
-- 인기 게시글(Hot) 정렬을 제공한다. (좋아요/댓글/조회수 가중치 + 시간 감쇠)
-- 프로필 이미지 및 닉네임 수정 기능을 제공한다.
-- 무한 스크롤 기반의 게시글 목록을 제공한다.
-- 모바일/데스크탑 반응형 UI를 제공한다.
-- 이메일 인증 기능을 제공한다. (회원가입 후 인증 메일 발송, 인증 완료 전 글쓰기 제한)
-- 알림 시스템을 제공한다. (좋아요/댓글 시 알림 생성, 읽음 처리, 폴링 기반)
-- 내 활동 조회 기능을 제공한다. (내가 쓴 글/댓글, 좋아요한 글, 북마크한 글)
-- 타 사용자 프로필 조회 기능을 제공한다. (공개 프로필, 닉네임 클릭으로 이동, 차단 기능)
-- 태그 시스템을 제공한다. (카테고리 + 태그 병행, 자유 입력, 게시글당 최대 5개, 태그 검색/필터링)
-- 읽은 게시글 표시 기능을 제공한다. (게시글 목록에서 이미 읽은 글 시각적 구분)
-
-## 목표가 아닌 것 (Non-Goals)
-
-- 소셜 로그인 (OAuth)
-
-## 계획 (Plan)
-
-### 1. 시스템 아키텍처
+## 시스템 아키텍처
 
 ```mermaid
 flowchart TD
-    subgraph Client["Client (Browser)"]
-        FE["Vanilla JS MPA<br/>정적 파일: HTML/CSS/JS<br/>개발: npm serve :8080 | 프로덕션: S3 + CloudFront"]
+    subgraph Client["Client"]
+        FE["HTTP (JSON/FormData)<br/>Bearer Token + HttpOnly Cookie"]
     end
 
-    Client -->|"HTTP (JSON/FormData)<br/>Bearer Token + HttpOnly Cookie"| Backend
+    Client -->|"REST API"| Backend
 
     subgraph Backend["FastAPI Backend (Port 8000)"]
-        direction LR
-        Routers --> Controllers --> Services --> Models --> Pool["aiomysql Pool"]
+        direction TB
+        MW["Middleware Stack<br/>CORS → Logging → Timing → Rate Limit → Exception Handler"]
+        MW --> Routers
+        Routers --> Controllers
+        Controllers --> Services
+        Services --> Models
+        Models --> Pool["aiomysql Pool<br/>(5-50 connections)"]
     end
 
-    note["Middleware: CORS → Logging → Timing → RateLimit"]
+    Backend -->|"Async Connection"| DB
 
-    Backend -->|"Async Connection Pool"| DB
+    subgraph DB["MySQL"]
+        Tables["23개 테이블<br/>user, post, comment, notification,<br/>tag, poll, dm_conversation, report ..."]
+    end
 
-    subgraph DB["MySQL Database"]
-        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log, tag, post_tag,<br/>email_verification, notification"]
+    Backend -->|"WebSocket Push"| WS
+
+    subgraph WS["실시간 알림"]
+        Pusher["websocket_pusher.py"]
+        Pusher --> DynamoDB["DynamoDB<br/>(ws_connections)"]
+        Pusher --> APIGW["API Gateway<br/>ManageConnections"]
     end
 ```
 
-### 2. 데이터베이스 설계
+### 백엔드 계층 구조
 
-#### ERD
+| 계층 | 디렉토리 | 역할 |
+| --- | --- | --- |
+| **Router** | `routers/` | API 엔드포인트 정의, 요청 파라미터 파싱 |
+| **Controller** | `controllers/` | 비즈니스 로직, HTTP 응답 생성 |
+| **Service** | `services/` | 컨트롤러-모델 간 비즈니스 로직 조율 |
+| **Model** | `models/` | Raw SQL 쿼리 (aiomysql parameterized queries) |
+| **Schema** | `schemas/` | Pydantic 요청/응답 모델, 유효성 검사 |
+| **Middleware** | `middleware/` | 로깅, 타이밍, Rate Limiting, 전역 예외 처리 |
+| **Dependency** | `dependencies/` | 인증(`get_current_user`, `require_verified_email`, `require_admin`) |
+| **Utility** | `utils/` | JWT, 비밀번호 해싱, 이메일 발송, 파일 업로드, WebSocket Pusher |
+
+---
+
+## 데이터베이스 설계
+
+### ERD
 
 ```mermaid
 erDiagram
@@ -92,6 +94,13 @@ erDiagram
     category ||--o{ post : "classifies"
     tag ||--o{ post_tag : "tagged"
     post ||--o{ post_tag : "has tags"
+    user ||--o{ user_follow : "follows"
+    user ||--o{ dm_conversation : "participates"
+    user ||--o{ poll_vote : "votes"
+    post ||--o{ poll : "has poll"
+    poll ||--o{ poll_option : "has options"
+    poll_option ||--o{ poll_vote : "receives"
+    dm_conversation ||--o{ dm_message : "contains"
 
     user {
         int id PK
@@ -197,7 +206,7 @@ erDiagram
         int user_id FK "수신자"
         int actor_id FK "발신자"
         int post_id FK
-        enum type "like, comment, reply, mention"
+        enum type "like, comment, reply, mention, follow"
         boolean is_read "default FALSE"
         datetime created_at
     }
@@ -241,12 +250,58 @@ erDiagram
         int post_id PK_FK
         int tag_id PK_FK
     }
+
+    user_follow {
+        int id PK
+        int follower_id FK
+        int following_id FK
+        datetime created_at
+    }
+
+    poll {
+        int id PK
+        int post_id FK
+        varchar question
+        datetime expires_at
+        datetime created_at
+    }
+
+    poll_option {
+        int id PK
+        int poll_id FK
+        varchar text
+        int sort_order
+    }
+
+    poll_vote {
+        int id PK
+        int poll_option_id FK
+        int user_id FK
+        datetime created_at
+    }
+
+    dm_conversation {
+        int id PK
+        int participant1_id FK
+        int participant2_id FK
+        datetime last_message_at
+        datetime created_at
+    }
+
+    dm_message {
+        int id PK
+        int conversation_id FK
+        int sender_id FK
+        text content
+        datetime created_at
+    }
 ```
 
-#### 주요 설계 결정
+### 주요 설계 결정
 
-- **Soft Delete**: `user`, `post`, `comment` 테이블에 `deleted_at` 컬럼 사용. 물리적 삭제 대신 논리적 삭제로 데이터 보존.
-- **JWT 기반 인증**: Access Token(30분, HS256) + Refresh Token(7일, opaque random). Access Token은 프론트엔드 in-memory 저장, Refresh Token은 HttpOnly 쿠키로 전달하고 SHA-256 해시로 DB 저장. JWT payload에는 `sub`(user_id)만 포함하여 PII 노출 방지. 토큰 회전(rotation)으로 Refresh Token 탈취 시 자동 무효화.
+- **Soft Delete**: `user`, `post`, `comment` 테이블에 `deleted_at` 컬럼 사용. 물리적 삭제 대신 논리적 삭제로 데이터 보존 및 FK 무결성 유지.
+- **JWT 기반 인증**: Access Token(30분, HS256) + Refresh Token(7일, opaque random). Refresh Token은 SHA-256 해시로 DB 저장. JWT payload에는 `sub`(user_id)만 포함하여 PII 노출 방지. 토큰 회전(rotation)으로 Refresh Token 탈취 시 자동 무효화.
+- **Raw SQL**: ORM 대신 aiomysql parameterized queries를 직접 작성하여 쿼리 최적화 및 성능 제어.
 - **인덱스 전략**:
   - `idx_refresh_token_hash`: Refresh Token 해시 조회
   - `idx_post_created_deleted`: 최신순 게시글 목록 조회
@@ -266,9 +321,11 @@ erDiagram
   - `idx_tag_name`: 태그 이름 검색
   - `idx_post_tag_tag_id`: 태그별 게시글 조회
 
-### 3. API 설계
+---
 
-#### 인증 API (`/v1/auth`)
+## API 설계
+
+### 인증 API (`/v1/auth`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
@@ -279,7 +336,7 @@ erDiagram
 | POST | `/v1/auth/verify-email` | 이메일 인증 토큰 검증 | X |
 | POST | `/v1/auth/resend-verification` | 인증 메일 재발송 | O |
 
-#### 사용자 API (`/v1/users`)
+### 사용자 API (`/v1/users`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
@@ -299,21 +356,11 @@ erDiagram
 | POST | `/v1/users/{user_id}/block` | 사용자 차단 | O (이메일 인증) |
 | DELETE | `/v1/users/{user_id}/block` | 사용자 차단 해제 | O (이메일 인증) |
 
-#### 알림 API (`/v1/notifications`)
+### 게시글 API (`/v1/posts`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
-| GET | `/v1/notifications` | 알림 목록 조회 (페이지네이션) | O |
-| GET | `/v1/notifications/unread-count` | 읽지 않은 알림 수 | O |
-| PATCH | `/v1/notifications/{id}/read` | 개별 알림 읽음 처리 | O |
-| PATCH | `/v1/notifications/read-all` | 전체 알림 읽음 처리 | O |
-| DELETE | `/v1/notifications/{id}` | 알림 삭제 | O |
-
-#### 게시글 API (`/v1/posts`)
-
-| Method | Endpoint | 설명 | 인증 |
-| ------ | -------- | ---- | ---- |
-| GET | `/v1/posts` | 게시글 목록 (페이지네이션, `?search=`, `?sort=latest\|likes\|views\|comments\|hot`, `?category_id=`, `?tag=태그명`) | X |
+| GET | `/v1/posts` | 게시글 목록 (페이지네이션, `?search=`, `?sort=latest\|likes\|views\|comments\|hot`, `?category_id=`, `?tag=태그명`, `?following=true`) | X |
 | POST | `/v1/posts` | 게시글 작성 (`category_id` 필수, `tags[]` 선택, 최대 5개) | O (이메일 인증) |
 | GET | `/v1/posts/{post_id}` | 게시글 상세 조회 | X |
 | PATCH | `/v1/posts/{post_id}` | 게시글 수정 | O (작성자) |
@@ -329,21 +376,32 @@ erDiagram
 | POST | `/v1/posts/{post_id}/comments` | 댓글 작성 (대댓글: `parent_id` 지원) | O |
 | PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
 | DELETE | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 삭제 | O (작성자/관리자) |
+| GET | `/v1/posts/{post_id}/related` | 연관 게시글 추천 (`?limit=5`) | X |
 | POST | `/v1/posts/image` | 게시글 이미지 업로드 | O |
 
-#### 태그 API (`/v1/tags`)
+### 알림 API (`/v1/notifications`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/notifications` | 알림 목록 조회 (페이지네이션) | O |
+| GET | `/v1/notifications/unread-count` | 읽지 않은 알림 수 | O |
+| PATCH | `/v1/notifications/{id}/read` | 개별 알림 읽음 처리 | O |
+| PATCH | `/v1/notifications/read-all` | 전체 알림 읽음 처리 | O |
+| DELETE | `/v1/notifications/{id}` | 알림 삭제 | O |
+
+### 태그 API (`/v1/tags`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
 | GET | `/v1/tags` | 태그 검색 (`?search=키워드`, 상위 10개, post_count 포함) | X |
 
-#### 카테고리 API (`/v1/categories`)
+### 카테고리 API (`/v1/categories`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
 | GET | `/v1/categories` | 카테고리 목록 조회 | X |
 
-#### 신고 API (`/v1/reports`, `/v1/admin/reports`)
+### 신고 API (`/v1/reports`, `/v1/admin/reports`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
@@ -351,14 +409,58 @@ erDiagram
 | GET | `/v1/admin/reports` | 신고 목록 조회 (`?status=pending\|resolved\|dismissed`) | O (관리자) |
 | PATCH | `/v1/admin/reports/{report_id}` | 신고 처리 (resolved/dismissed, `suspend_days` 옵션) | O (관리자) |
 
-#### 계정 정지 API (`/v1/admin/users`)
+### 계정 정지 API (`/v1/admin/users`)
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
 | POST | `/v1/admin/users/{user_id}/suspend` | 사용자 기간 정지 (1~365일, 사유 필수) | O (관리자) |
 | DELETE | `/v1/admin/users/{user_id}/suspend` | 사용자 정지 해제 | O (관리자) |
 
-#### 응답 형식
+### 팔로우 API (`/v1/users`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| POST | `/v1/users/{user_id}/follow` | 팔로우 | O (이메일 인증) |
+| DELETE | `/v1/users/{user_id}/follow` | 언팔로우 | O (이메일 인증) |
+| GET | `/v1/users/me/followers` | 내 팔로워 목록 | O |
+| GET | `/v1/users/me/following` | 내 팔로잉 목록 | O |
+
+### DM API (`/v1/dms`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/dms` | DM 대화 목록 | O |
+| POST | `/v1/dms` | 대화 시작 (recipient_id) | O |
+| GET | `/v1/dms/unread-count` | 읽지 않은 대화 수 | O |
+| GET | `/v1/dms/{conversation_id}` | 메시지 목록 | O |
+| DELETE | `/v1/dms/{conversation_id}` | 대화 삭제 (soft delete) | O |
+| POST | `/v1/dms/{conversation_id}/messages` | 메시지 전송 | O |
+| PATCH | `/v1/dms/{conversation_id}/read` | 읽음 처리 | O |
+
+### 투표 API
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| POST | `/v1/posts/{post_id}/poll/vote` | 투표 참여 (option_id) | O (이메일 인증) |
+
+### 관리자 대시보드 API
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/admin/dashboard` | 대시보드 요약 통계 | O (관리자) |
+| GET | `/v1/admin/users` | 사용자 관리 목록 (`?search=&offset=&limit=`) | O (관리자) |
+
+### WebSocket (`wss://`)
+
+| 이벤트 | 설명 |
+| --- | --- |
+| `$connect` | JWT 인증 핸드셰이크, DynamoDB 연결 저장 |
+| `$default` | Heartbeat (30초 주기 ping/pong) |
+| `$disconnect` | DynamoDB 연결 삭제 |
+| `notification` | 실시간 알림 푸시 (like, comment, mention, follow) |
+| `dm` | 실시간 DM 메시지 수신 |
+
+### 응답 형식
 
 ```json
 {
@@ -370,18 +472,21 @@ erDiagram
 }
 ```
 
-#### 에러 코드
+### 에러 코드
 
 | HTTP Status | 설명 |
 | ----------- | ---- |
 | 400 | 잘못된 요청 (유효성 검사 실패) |
 | 401 | 인증 필요 (토큰 만료/미로그인) |
-| 403 | 권한 없음 (타인의 게시글 수정 시도 등) |
+| 403 | 권한 없음 (타인의 게시글 수정 시도, 계정 정지 등) |
 | 404 | 리소스 없음 |
-| 409 | 충돌 (이메일/닉네임 중복) |
+| 409 | 충돌 (이메일/닉네임 중복, 중복 좋아요/북마크/신고) |
+| 429 | 요청 빈도 초과 (Rate Limit) |
 | 500 | 서버 오류 |
 
-### 4. 인증 흐름
+---
+
+## 인증 흐름
 
 ```mermaid
 sequenceDiagram
@@ -422,250 +527,204 @@ sequenceDiagram
     end
 ```
 
-### 5. 프론트엔드 아키텍처
+---
 
-#### 디렉토리 구조
+## 핵심 패턴
 
-```text
-2-cho-community-fe/
-├── html/                    # 13개 정적 HTML 페이지
-│   ├── post_list.html       # 메인 피드
-│   ├── post_detail.html     # 게시글 상세
-│   ├── post_write.html      # 게시글 작성
-│   ├── post_edit.html       # 게시글 수정
-│   ├── user_login.html      # 로그인
-│   ├── user_signup.html     # 회원가입
-│   ├── user_find_account.html # 계정 찾기 (이메일/비밀번호)
-│   ├── user_password.html   # 비밀번호 변경
-│   ├── user_edit.html       # 프로필 수정
-│   ├── verify-email.html    # 이메일 인증
-│   ├── notifications.html   # 알림
-│   ├── my-activity.html     # 내 활동
-│   └── user-profile.html    # 타 사용자 프로필
-│
-├── js/
-│   ├── app/                 # 페이지별 진입점
-│   ├── controllers/         # 비즈니스 로직
-│   ├── models/              # API 통신 계층
-│   ├── views/               # DOM 렌더링
-│   ├── services/            # ApiService (HTTP 클라이언트)
-│   ├── utils/               # Logger, Validators, Formatters
-│   ├── config.js            # API_BASE_URL
-│   └── constants.js         # 엔드포인트, 메시지, 라우트
-│
-└── css/
-    ├── style.css            # 마스터 import
-    ├── base.css             # 리셋, 타이포그래피
-    ├── layout.css           # 헤더, 컨테이너
-    ├── modules/             # 재사용 컴포넌트 (버튼, 폼, 카드, 모달, 토스트)
-    └── pages/               # 페이지별 스타일
+### 트랜잭션 관리 (`transactional()`)
+
+모든 쓰기 작업(INSERT/UPDATE/DELETE)은 `async with transactional() as cur:` 컨텍스트 매니저를 사용. 다중 쿼리의 원자성을 보장하고 Phantom Read를 방지합니다.
+
+```python
+async with transactional() as cur:
+    await cur.execute("INSERT INTO post ...", params)
+    post_id = cur.lastrowid
+    await cur.execute("INSERT INTO post_image ...", (post_id, url))
 ```
 
-#### MVC 패턴
+- **IntegrityError는 transactional() 밖에서 처리**: 내부에서 catch 후 return하면 context manager가 commit을 시도하여 2차 에러 발생. 반드시 전파시켜 rollback 후 controller에서 처리.
+- **격리 수준**: READ COMMITTED (Dirty Read 방지, 성능 균형)
 
-- **Model**: API 호출 담당. `AuthModel`, `PostModel`, `UserModel`, `CommentModel`, `NotificationModel`, `ActivityModel`
-- **View**: DOM 렌더링. 정적 메서드로 HTML 생성 및 이벤트 바인딩
-- **Controller**: 비즈니스 로직. Model과 View 조정, 상태 관리 (`MainController`, `NotificationController`, `MyActivityController`, `UserProfileController` 등)
+### Soft Delete 패턴
 
-#### 주요 패턴
+`user`, `post`, `comment` 테이블에 `deleted_at` 컬럼 사용. 모든 조회 쿼리에 `WHERE deleted_at IS NULL` 조건 필수. 대댓글이 있는 삭제된 부모 댓글은 플레이스홀더로 표시.
 
-- **정적 메서드**: 모든 클래스가 static 메서드만 사용
-- **IntersectionObserver**: 무한 스크롤 구현
-- **Custom Event**: `auth:session-expired` 이벤트로 401 처리 (silent refresh 실패 시 발생)
-- **XSS 방지**: `createElement()` / `textContent` 기반 DOM 생성 (innerHTML 금지)
+### Rate Limiting
 
-### 6. 보안 고려사항
+IP 기반 요청 빈도 제한. `middleware/rate_limiter.py`에서 경로별 설정 관리.
+
+- 경로 정규화: `_PATH_PARAM_RE`로 `/v1/posts/123` → `/v1/posts/{id}` 변환
+- 키 형식: `"IP:METHOD:/v1/path/{id}/action"` — IP + HTTP 메서드 + 경로 독립
+- 메모리 보호: 최대 10,000개 IP 추적, 초과 시 배치 제거(10%)
+- OPTIONS(CORS preflight) 요청 제외
+
+### 정보 열거 방지
+
+이메일 찾기/비밀번호 재설정 API에서 사용자 존재 여부와 무관하게 동일한 응답을 반환. 미존재 사용자도 bcrypt 해싱을 수행하여 타이밍 사이드 채널 공격 방지.
+
+### 이메일 발송
+
+`utils/email.py`에서 `EMAIL_BACKEND` 설정에 따라 SES(프로덕션) 또는 SMTP(로컬) 사용. `asyncio.to_thread()`로 블로킹 SMTP I/O를 비동기 처리.
+
+### @멘션 알림
+
+`utils/mention.py`의 `extract_mentions()`가 댓글 본문에서 `@닉네임` 패턴을 파싱. 닉네임으로 사용자 조회 후 `notification_models.create_notification(type="mention")` 호출. `already_notified` set으로 자기 자신 및 중복 알림 방지.
+
+### WebSocket 실시간 푸시
+
+`utils/websocket_pusher.py`가 알림 생성 시 DynamoDB에서 대상 사용자의 WebSocket 연결을 조회하고 API Gateway ManagementAPI로 메시지를 전송. Best-effort 방식으로 트랜잭션 밖에서 처리되며, 실패해도 알림 생성에 영향 없음.
+
+### datetime 포맷팅
+
+모든 모델의 datetime 필드는 `utils/formatters.py`의 `format_datetime()`으로 ISO 8601 변환 후 반환. 모델 레벨에서 일관 적용.
+
+### 인기 게시글 (Hot Score)
+
+```
+score = (likes * 3 + comments * 2 + views * 0.5) / POW(hours_since_creation + 2, 1.5)
+```
+
+시간 감쇠 가중치 수식으로 최근 인기 게시글이 상위에 노출됩니다.
+
+### 연관 게시글 추천
+
+`LEFT JOIN post_tag`으로 현재 게시글과 태그 매칭 수를 계산하고, 동일 카테고리 보너스 + hot score를 가산하여 정렬. 태그 없는 게시글은 카테고리 + hot score로 폴백. 차단 사용자의 게시글 제외.
+
+---
+
+## 보안
 
 | 항목 | 구현 방식 |
 | ---- | --------- |
-| 정보 열거 방지 | 이메일/비밀번호 찾기에서 존재 여부 무관하게 동일 응답 + 더미 bcrypt 해싱 (타이밍 공격 방지) |
-| 비밀번호 해싱 | bcrypt (cost factor 기본값) |
-| JWT 인증 | Access Token(30분, in-memory) + Refresh Token(7일, HttpOnly Cookie, SHA-256 해시 DB 저장) |
-| CORS | 허용 출처 명시적 설정 (localhost:8080) |
-| SQL Injection | Parameterized queries (aiomysql) |
-| XSS | 프론트엔드에서 `createElement()` / `textContent` 사용 (innerHTML 금지) |
-| Timing Attack | 로그인 시 존재하지 않는 사용자도 bcrypt 검증 수행 |
+| **비밀번호 해싱** | bcrypt (cost factor 기본값), `asyncio.to_thread()`로 비동기 처리 |
+| **JWT 인증** | Access Token(30분, in-memory) + Refresh Token(7일, HttpOnly Cookie, SHA-256 해시 DB 저장, 토큰 회전) |
+| **Refresh Token 보안** | `SELECT ... FOR UPDATE` 행 잠금으로 동시 재사용(replay attack) 방지 |
+| **CORS** | 허용 출처 명시적 설정, `allow_credentials=true` 시 와일드카드 금지 |
+| **SQL Injection** | Parameterized queries (aiomysql), 정렬 옵션 화이트리스트 검증 |
+| **타이밍 공격** | 미존재 사용자 로그인 시에도 실제 bcrypt 검증 수행 |
+| **정보 열거 방지** | 이메일/비밀번호 찾기에서 존재 여부 무관하게 동일 응답 반환 |
+| **Path Traversal** | `Path.resolve()` + `is_relative_to()`로 경로 탈출 차단 |
+| **이미지 URL 검증** | `schemas/_image_validators.py` 공통 헬퍼로 업로드/프로필 이미지 URL 검증 |
+| **Rate Limiting** | IP 기반 엔드포인트별 요청 빈도 제한, 메모리 상한 보장 |
+| **계정 정지** | `_validate_token()` + `login()` + `refresh_token()` 3중 차단, 기간 자동 만료 |
+| **Lambda 시크릿** | SSM SecureString + `get_parameters()` 배치 API로 콜드 스타트 시 일괄 조회 |
+| **DEBUG 모드** | 기본값 `False`, 프로덕션 에러 메시지에 내부 정보 미포함 |
 
-### 7. 비밀번호 정책
+---
+
+## 시작하기
+
+### 사전 요구사항
+
+- Python 3.11+
+- MySQL 8.0+
+- uv (패키지 매니저)
+
+### 설치 및 실행
+
+```bash
+# 1. MySQL 설치 및 실행 (macOS)
+brew install mysql
+brew services start mysql
+
+# 2. 데이터베이스 생성
+mysql -u root -p -e "CREATE DATABASE community_service;"
+
+# 3. 백엔드 설정
+cd 2-cho-community-be
+python -m venv .venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+# 4. 환경변수 설정
+cp .env.example .env
+# .env 파일에서 DB_USER, DB_PASSWORD, SECRET_KEY 수정
+
+# 5. 스키마 적용 및 시드 데이터
+mysql -u root -p community_service < database/schema.sql
+python database/seed_data.py  # 선택사항
+
+# 6. 서버 실행
+uvicorn main:app --reload --port 8000
+```
+
+서버가 `http://localhost:8000`에서 실행됩니다. API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+
+---
+
+## 설정
+
+### 환경변수 (`.env`)
+
+| 변수 | 설명 | 기본값 |
+| ---- | ---- | ------ |
+| `DB_HOST` | MySQL 호스트 | `127.0.0.1` |
+| `DB_PORT` | MySQL 포트 | `3306` |
+| `DB_USER` | MySQL 사용자 | (필수) |
+| `DB_PASSWORD` | MySQL 비밀번호 | (필수) |
+| `DB_NAME` | 데이터베이스명 | `community_service` |
+| `SECRET_KEY` | JWT 서명키 (HS256) | (필수) |
+| `DEBUG` | 디버그 모드 | `False` |
+| `ALLOWED_ORIGINS` | CORS 허용 출처 | `http://localhost:8080` |
+| `EMAIL_BACKEND` | 이메일 발송 방식 | `smtp` |
+| `EMAIL_FROM` | 발신 이메일 주소 | - |
+| `SMTP_HOST` | SMTP 서버 호스트 | - |
+| `SMTP_PORT` | SMTP 서버 포트 | - |
+| `TESTING` | Rate Limit 비활성화 | `false` |
+| `TRUSTED_PROXIES` | 프록시 신뢰 IP | `127.0.0.1,::1` |
+
+---
+
+## 테스트
+
+```bash
+# 가상환경 활성화
+cd 2-cho-community-be && source .venv/bin/activate
+
+# 전체 테스트
+pytest
+
+# 단일 테스트
+pytest tests/test_qa_full.py::test_name
+
+# 커버리지 리포트
+pytest --cov
+
+# 린팅
+ruff check .
+ruff check . --fix
+
+# 타입 체크
+mypy .
+```
+
+**테스트 현황**: 275+ 테스트, 87% 커버리지
+
+### 부하 테스트 (Locust)
+
+```bash
+# Locust 설치
+uv pip install -e ".[load-test]"
+
+# 테스트 계정 시딩 (15~25분 소요)
+python -m load_tests.seed_accounts --mode api --host https://api.my-community.shop
+
+# UI 모드 (localhost:8089)
+locust -f load_tests/locustfile.py --host=https://api.my-community.shop
+
+# CLI 모드
+locust -f load_tests/locustfile.py --host=https://api.my-community.shop \
+    --users=100 --spawn-rate=5 --run-time=10m --headless
+
+# 로컬 테스트
+locust -f load_tests/locustfile.py --host=http://127.0.0.1:8000
+```
+
+3종 사용자 시나리오: ReaderUser(60%), WriterUser(20%), ActiveUser(20%). 계정 풀(`queue.Queue`)로 동시 사용자 간 1:1 바인딩.
+
+---
+
+## 비밀번호 정책
 
 - 길이: 8-20자
 - 필수 포함: 대문자, 소문자, 숫자, 특수문자
-
-## 이외 고려 사항들 (Other Considerations)
-
-- **JWT 인증**: Access Token(HS256, 30분) + Refresh Token(opaque random, 7일) 이중 토큰 전략 사용. Access Token은 프론트엔드 in-memory(JS 변수)에 저장하여 XSS 노출 최소화, Refresh Token은 HttpOnly 쿠키로 전달하고 SHA-256 해시로 DB에 저장. 토큰 회전(rotation)을 통해 Refresh Token 탈취 시 자동 무효화. CSRF 미들웨어는 제거됨 (Bearer 토큰이 CSRF 방어 역할).
-- **ORM vs Raw SQL**: SQLAlchemy 등 ORM 사용을 고려했으나, 학습 목적으로 raw SQL을 직접 작성하여 쿼리 최적화 경험을 쌓기로 결정.
-- **Vanilla JS**: React, Vue 등 프레임워크 대신 Vanilla JS를 선택. 프레임워크 학습 비용 없이 JavaScript 기본기를 다지는 것이 목표.
-- **이미지 저장소**: 프로덕션에서는 EFS(`/mnt/uploads`)에 저장. 로컬 개발 시에도 로컬 파일시스템 사용.
-- **Soft Delete**: 물리적 삭제 대신 `deleted_at` 컬럼 사용. 데이터 복구 가능성 확보 및 FK 무결성 유지.
-
-## 마일스톤 (Milestones)
-
-| 단계 | 기간 | 내용 |
-| ---- | ---- | ---- |
-| 1단계 | 1주차 | DB 스키마 설계, 백엔드 프로젝트 셋업, 인증 API 구현 |
-| 2단계 | 2주차 | 게시글/댓글/좋아요 API 구현, 이미지 업로드 |
-| 3단계 | 3주차 | 프론트엔드 구현 (HTML/CSS/JS), API 연동 |
-| 4단계 | 4주차 | E2E 테스트 작성, QA, 버그 수정 |
-| 5단계 | 5주차 | 문서화, 코드 리뷰, 최종 배포 |
-
-## Changelog
-
-### 2026-03 (Mar)
-
-- **03-09: 팔로잉 피드 + 연관 게시글 추천**
-  - 팔로잉 피드: `GET /v1/posts?following=true` — 팔로우한 사용자의 게시글만 필터링
-  - 연관 게시글: `GET /v1/posts/{id}/related?limit=5` — 태그 매칭 + 카테고리 + hot score 기반 추천
-  - 팔로우 Rate Limit 보강: `POST/DELETE /v1/users/{id}/follow` (10 req/60s)
-  - 연관 게시글 Rate Limit: `GET /v1/posts/{id}/related` (30 req/60s)
-
-- **03-08: 실시간 알림 (WebSocket) — 백엔드**
-  - WebSocket Lambda 핸들러: `websocket/` 패키지 (`handler.py`, `dynamo.py`, `auth.py`)
-  - WebSocket Pusher: `utils/websocket_pusher.py` — DynamoDB 조회 → API GW Management API 전송 (best-effort)
-  - 알림 생성 시 실시간 푸시 통합: `notification_models.create_notification()` → `push_to_user()`
-  - 로컬 개발 WebSocket: `routers/websocket_router.py` (DEBUG 전용, 인메모리 연결 관리)
-  - 테스트: 22개 (handler + pusher), 전체 256 passed, 86% coverage
-
-- **03-06: 투표(Poll) 시스템**
-  - DB: `poll`, `poll_option`, `poll_vote` 테이블, `migration_polls.sql` 마이그레이션
-  - 게시글 생성 시 투표 동시 생성 (`CreatePostRequest.poll` 필드, 옵션 2~10개, 만료일 선택)
-  - 투표 참여 API: `POST /v1/posts/{id}/poll/vote` (중복 투표 409, 만료 400)
-  - 게시글 상세에 투표 데이터 포함 (옵션별 득표수, 총 투표수, 내 투표, 만료 여부)
-  - 테스트: 9개 테스트
-
-- **03-06: 관리자 대시보드**
-  - 대시보드 요약 API: `GET /v1/admin/dashboard` (총 사용자/게시글/댓글, 오늘 가입자)
-  - 일별 통계 API: 30일간 가입자/게시글/댓글 수 추이
-  - 사용자 관리 API: `GET /v1/admin/users` (검색, 페이지네이션)
-  - 테스트: 5개 테스트
-
-- **03-06: 팔로우/팔로잉 시스템**
-  - DB: `user_follow` 테이블, `notification.type` ENUM에 `follow` 추가
-  - 팔로우/언팔로우 API: `POST/DELETE /v1/users/{id}/follow` (자기 자신/중복 방지)
-  - 내 팔로워/팔로잉 목록: `GET /v1/users/me/followers`, `/me/following`
-  - 프로필에 팔로워/팔로잉 수 + 팔로우 여부 표시
-  - 팔로우한 사용자의 새 게시글 작성 시 팔로워에게 알림 발송
-  - 테스트: 12개 테스트
-
-- **03-06: 태그 시스템**
-  - DB: `tag`(이름 UNIQUE) + `post_tag`(다대다) 테이블, `migration_tags.sql` 마이그레이션
-  - API: 게시글 생성/수정에 `tags[]` 배열 추가 (최대 5개, 소문자 정규화, 자동 생성)
-  - 태그 검색: `GET /v1/tags?search=키워드` (상위 10개, post_count 포함)
-  - 태그 필터: `GET /v1/posts?tag=태그명` (해당 태그가 달린 게시글 필터링)
-  - 테스트: 12개 테스트 (CRUD, 정규화, 검색, 필터링, 제한)
-
-- **03-06: 읽은 게시글 표시**
-  - `post_view_log` 테이블 재활용, `get_read_post_ids()` 벌크 조회 (N+1 방지)
-  - 게시글 목록 응답에 `is_read: bool` 필드 추가 (비로그인 시 항상 false)
-  - 테스트: 3개 테스트 (미읽음, 조회 후 읽음, 비로그인)
-
-- **03-05: @멘션 알림**
-  - 댓글 @닉네임 파싱 → 사용자 조회 → 멘션 알림 생성
-  - `notification.type` ENUM에 `mention` 추가
-  - 자기 자신/중복 알림 방지 (`already_notified` set)
-  - 테스트: 11개 테스트
-
-- **03-04: 계정 정지 시스템 (관리자 전용)**
-  - DB: `user.suspended_until` TIMESTAMP + `suspended_reason` VARCHAR(500), `idx_user_suspended` 인덱스
-  - 인증 차단: `_validate_token()`(403), `login()`(403), `refresh_token()`(403) 3중 체크. 자동 만료 (배치 작업 불필요)
-  - 관리자 API: `POST /v1/admin/users/{id}/suspend` (1~365일 기간 정지), `DELETE /v1/admin/users/{id}/suspend` (정지 해제)
-  - 신고 연동: `ResolveReportRequest.suspend_days` 옵션으로 신고 처리 시 작성자 동시 정지. 비원자적 트랜잭션 — 정지 실패 시 로깅
-  - 테스트: 17개 테스트 (인증 차단, 만료 허용, 신고 연동, 입력 검증, 비정지 사용자 해제 방지)
-
-- **03-03: Blue/Green Deployment (Lambda Alias 기반)**
-  - CD 파이프라인: `--publish`로 Lambda 버전 발행 → `/health` 직접 호출 health check → `live` alias 전환
-  - 롤백 워크플로우: `rollback-backend.yml` 신규 — 수동 트리거로 이전 Lambda 버전 즉시 전환
-  - 보안 강화: 입력값 sanitization (env var 패턴), 동시 배포 방지 (`concurrency`), `create-alias` 폴백
-
-- **03-02: 북마크, 댓글 좋아요, 공유, 다중 이미지, 사용자 차단, 인기 게시글**
-  - 북마크: `post_bookmark` 테이블, 게시글 북마크 추가/해제 API, 내 북마크 목록, 상세 `bookmarks_count`+`is_bookmarked`
-  - 댓글 좋아요: `comment_like` 테이블, 댓글별 좋아요/취소 API, 트리에 `likes_count`+`is_liked`, 벌크 조회로 N+1 방지
-  - 사용자 차단: `user_block` 테이블, 차단/해제 API, 게시글 SQL 필터(`NOT IN`), 댓글 Python 후처리 필터
-  - 다중 이미지: `post_image` 테이블(`sort_order`), 최대 5개, `image_urls`↔`image_url` 하위 호환, 마이그레이션 스크립트
-  - 인기 게시글: `hot` 정렬 옵션, `(likes*3+comments*2+views*0.5)/POW(hours+2,1.5)` 가중치 수식
-  - 공유: Web Share API(모바일) / 클립보드 복사(데스크톱) 프론트엔드 전용
-  - 프론트엔드: 낙관적 UI(북마크/좋아요), 이미지 갤러리, 댓글 좋아요 버튼, 차단 버튼, 내 활동 북마크 탭
-
-- **03-02: 관리자 역할, 신고 시스템, 카테고리, 게시글 고정**
-  - 관리자 역할: `user.role` ENUM 컬럼, `require_admin` 의존성, 관리자 게시글/댓글 삭제 권한
-  - 카테고리: `category` 테이블 (4종 시드), `post.category_id` FK, 카테고리별 게시글 필터링
-  - 신고: `report` 테이블 (UNIQUE 중복 방지), 자기 콘텐츠 신고 방지, 관리자 처리(resolved→삭제/dismissed→유지)
-  - 게시글 고정: `post.is_pinned` 플래그, 관리자 전용 PIN/UNPIN API, 목록 상단 표시
-
-- **03-02: 이메일 인증, 알림, 내 활동, 사용자 프로필**
-  - 이메일 인증: `email_verification` 테이블, 토큰 기반 인증 흐름, `require_verified_email` 가드 (게시글/댓글 쓰기)
-  - 알림 시스템: `notification` 테이블, 좋아요/댓글 트리거, CRUD API, 읽음 처리
-  - 내 활동: 내가 쓴 글/댓글/좋아요한 글 조회 API (`/v1/users/me/posts|comments|likes`)
-  - 사용자 프로필: 공개 프로필 조회 (이메일 제외), `author_id` 필터로 게시글 목록 조회
-
-- **03-02: 검색, 정렬, 대댓글 기능**
-  - 게시글 검색: FULLTEXT INDEX(ngram parser)로 제목+내용 한국어 검색, 특수문자 이스케이프, BOOLEAN MODE
-  - 게시글 정렬: 최신순/좋아요순/조회수순/댓글순 4종, `ALLOWED_SORT_OPTIONS` 화이트리스트로 SQL 주입 방지
-  - 대댓글(1단계): `comment.parent_id` 자기참조 FK, 앱 레벨 O(n) 트리 구성, 삭제된 부모 플레이스홀더 표시
-  - 프론트엔드: 검색바+정렬 버튼 UI, 대댓글 인디케이터+들여쓰기, 세대 카운터로 비동기 응답 경쟁 방지
-
-- **03-01: Locust 부하 테스트 구축**
-  - 3종 사용자 시나리오: ReaderUser(60%), WriterUser(20%), ActiveUser(20%)
-  - 계정 풀(`queue.Queue` 싱글턴)로 동시 사용자 간 계정 1:1 바인딩, Refresh Token 충돌 방지
-  - Rate Limit 준수 설계: 로그인 1회/세션, WriterUser 대기 8-20초, 429 시 `gevent.sleep(65s)` 재시도
-  - AWS 배포 환경 대상 (API Gateway → Lambda → RDS), 동시 50-200명 규모
-  - `seed_accounts.py`: API/DB 이중 모드 계정 시딩 (회원가입 API 또는 직접 DB 접속)
-
-### 2026-02 (Feb)
-
-- **02-28: 계정 찾기 기능 (이메일 찾기 + 비밀번호 재설정)**
-  - 이메일 찾기: 닉네임으로 마스킹된 이메일 조회 (`POST /v1/users/find-email`)
-  - 비밀번호 재설정: 임시 비밀번호 생성 후 이메일 발송 (`POST /v1/users/reset-password`)
-  - 이메일 발송 이중 지원: SES(프로덕션) + SMTP(로컬 개발), `asyncio.to_thread()`로 비동기 처리
-  - 보안: 정보 열거 방지(존재 여부 무관 동일 응답), 타이밍 공격 방지(더미 bcrypt), Rate Limiting(5/5분, 3/5분)
-
-- **02-28: 코드 리뷰 기반 보안 강화 + 버그 수정**
-  - 보안 취약점: Path Traversal(`Path.is_relative_to()`), SSRF(`/uploads/` 프리픽스 강제), 이미지 URL 검증 공통 헬퍼(`_image_validators.py`)
-  - 토큰·시크릿: `SELECT ... FOR UPDATE`(replay attack 방지), Lambda 시크릿 SSM SecureString 전환(`get_parameters` 배치 API)
-  - 안정성: `transactional()` 일관성 통일, Rate limiter 키 동기화, IntegrityError 처리 개선
-
-- **02-27: GitHub Actions CD 파이프라인 구축**
-  - `deploy-backend.yml`: `workflow_dispatch` → Docker build → ECR push (SHA + latest) → Lambda update
-  - OIDC 인증 (GitHub → AWS IAM Role), 환경 선택 (dev/staging/prod)
-  - `--provenance=false` 필수, `aws lambda wait function-updated`로 배포 완료 대기
-
-- **02-26: AWS 인프라 Terraform 구축 및 배포**
-  - 14개 Terraform 모듈 구성 및 dev 환경 전체 배포
-  - CloudFront CDN + HTTPS + Clean URL (CloudFront Functions)
-  - Lambda 컨테이너 (Python 3.13/AL2023), EFS, RDS, API Gateway, EC2 bastion
-  - 앱 코드에서 AWS 하드코딩 제거, 로컬 개발 환경 정리
-
-- **02-25: JWT 인증 전환 + 보안 강화**
-  - 세션 기반 → JWT (Access Token 30분 + Refresh Token 7일, 토큰 회전)
-  - JWT payload 최소화: PII 제거, `sub`(user_id)만 유지
-  - ProxyHeadersMiddleware 보안 수정, GitHub Actions CI 구축
-
-- **02-09 ~ 12: CSRF 보호 + 코드 품질 + 프론트엔드 환경 개선**
-  - Double Submit Cookie 패턴 CSRF 방어 (JWT 전환 후 제거)
-  - 크리티컬 버그 수정: `update_post()` params 순서, 트랜잭션 원자성
-  - SQL Injection 방어: 동적 쿼리 whitelist 검증
-  - 프론트엔드 npm serve 마이그레이션 (Port 8080)
-
-- **02-02 ~ 05: 아키텍처 리팩토링**
-  - Service Layer 도입 (`post_service`, `user_service`)
-  - Rate Limiter 미들웨어 (IP 기반 브루트포스 방지)
-  - 단위 테스트 도입 (커버리지 85%), DB 격리 수준 READ COMMITTED
-  - 코드 리뷰 기반 보안/코드 품질 전면 개선
-
-### 2026-01 (Jan)
-
-- **01-28 ~ 30: 데이터베이스 연동 + 보안 강화**
-  - MySQL + aiomysql 커넥션 풀, 트랜잭션 적용
-  - bcrypt 비밀번호 해싱, 세션 보안 강화
-  - 조회수/무한 스크롤/이미지 업로드 버그 수정
-  - 좋아요/댓글 모델 분리, 코드 중복 제거
-
-- **01-19 ~ 26: 게시글 API + 프론트엔드 연결**
-  - 게시글 CRUD, 좋아요, 댓글 API 완성
-  - CORS 설정, 프론트엔드 서버 연결
-  - Pydantic 스키마, 미들웨어(로깅/타이밍/예외처리) 도입
-
-- **01-12 ~ 17: 초기 구현**
-  - router-controller-model 아키텍처 구현
-  - 회원가입/로그인/로그아웃 (세션 기반)
-  - 회원 CRUD API (프로필, 비밀번호 변경, 탈퇴)
