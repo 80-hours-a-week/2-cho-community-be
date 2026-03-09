@@ -3,7 +3,7 @@ AWS AI School 2기 과제: 커뮤니티 백엔드 서버
 
 ## 요약 (Summary)
 
-커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글(대댓글 포함), 좋아요, 북마크, 댓글 좋아요, 검색/정렬(인기순 포함), 다중 이미지, 사용자 차단, 공유, 이메일 인증, 실시간 알림(WebSocket), 내 활동 조회, 사용자 프로필, 계정 정지(관리자), 태그 시스템, 읽은 게시글 표시, 팔로우/팔로잉, 관리자 대시보드, 투표(Poll) 기능을 제공합니다.
+커뮤니티 포럼 "아무 말 대잔치"를 구축합니다. FastAPI를 기반으로 하는 비동기 백엔드와 Vanilla JavaScript 프론트엔드로 구성된 모노레포 구조이며, JWT 기반 인증(Access Token + Refresh Token)과 MySQL 데이터베이스를 사용합니다. 게시글 CRUD, 댓글(대댓글 포함), 좋아요, 북마크, 댓글 좋아요, 검색/정렬(인기순 포함), 다중 이미지, 사용자 차단, 공유, 이메일 인증, 실시간 알림(WebSocket), 내 활동 조회, 사용자 프로필, 계정 정지(관리자), 태그 시스템, 읽은 게시글 표시, 팔로우/팔로잉, 관리자 대시보드, 투표(Poll), DM(쪽지), 팔로잉 피드, 연관 게시글 추천 기능을 제공합니다.
 
 ## 배경 (Background)
 
@@ -33,6 +33,9 @@ AWS AI School 2기의 개인 프로젝트로 커뮤니티 서비스를 개발해
 - 타 사용자 프로필 조회 기능을 제공한다. (공개 프로필, 닉네임 클릭으로 이동, 차단 기능)
 - 태그 시스템을 제공한다. (카테고리 + 태그 병행, 자유 입력, 게시글당 최대 5개, 태그 검색/필터링)
 - 읽은 게시글 표시 기능을 제공한다. (게시글 목록에서 이미 읽은 글 시각적 구분)
+- DM(쪽지) 기능을 제공한다. (1:1 비공개 메시지, WebSocket 실시간 수신)
+- 팔로잉 피드를 제공한다. (팔로우한 사용자의 게시글만 필터링)
+- 연관 게시글 추천을 제공한다. (태그 매칭 + 카테고리 + hot score 기반)
 
 ## 목표가 아닌 것 (Non-Goals)
 
@@ -60,7 +63,7 @@ flowchart TD
     Backend -->|"Async Connection Pool"| DB
 
     subgraph DB["MySQL Database"]
-        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log, tag, post_tag,<br/>email_verification, notification"]
+        Tables["user, refresh_token, post, comment,<br/>post_like, image, post_view_log, tag, post_tag,<br/>post_bookmark, comment_like, user_block, post_image,<br/>poll, poll_option, poll_vote, user_follow,<br/>dm_conversation, dm_message,<br/>email_verification, notification, category, report"]
     end
 ```
 
@@ -92,6 +95,13 @@ erDiagram
     category ||--o{ post : "classifies"
     tag ||--o{ post_tag : "tagged"
     post ||--o{ post_tag : "has tags"
+    user ||--o{ user_follow : "follows"
+    user ||--o{ dm_conversation : "participates"
+    user ||--o{ poll_vote : "votes"
+    post ||--o{ poll : "has poll"
+    poll ||--o{ poll_option : "has options"
+    poll_option ||--o{ poll_vote : "receives"
+    dm_conversation ||--o{ dm_message : "contains"
 
     user {
         int id PK
@@ -197,7 +207,7 @@ erDiagram
         int user_id FK "수신자"
         int actor_id FK "발신자"
         int post_id FK
-        enum type "like, comment, reply, mention"
+        enum type "like, comment, reply, mention, follow"
         boolean is_read "default FALSE"
         datetime created_at
     }
@@ -240,6 +250,51 @@ erDiagram
     post_tag {
         int post_id PK_FK
         int tag_id PK_FK
+    }
+
+    user_follow {
+        int id PK
+        int follower_id FK
+        int following_id FK
+        datetime created_at
+    }
+
+    poll {
+        int id PK
+        int post_id FK
+        varchar question
+        datetime expires_at
+        datetime created_at
+    }
+
+    poll_option {
+        int id PK
+        int poll_id FK
+        varchar text
+        int sort_order
+    }
+
+    poll_vote {
+        int id PK
+        int poll_option_id FK
+        int user_id FK
+        datetime created_at
+    }
+
+    dm_conversation {
+        int id PK
+        int participant1_id FK
+        int participant2_id FK
+        datetime last_message_at
+        datetime created_at
+    }
+
+    dm_message {
+        int id PK
+        int conversation_id FK
+        int sender_id FK
+        text content
+        datetime created_at
     }
 ```
 
@@ -313,7 +368,7 @@ erDiagram
 
 | Method | Endpoint | 설명 | 인증 |
 | ------ | -------- | ---- | ---- |
-| GET | `/v1/posts` | 게시글 목록 (페이지네이션, `?search=`, `?sort=latest\|likes\|views\|comments\|hot`, `?category_id=`, `?tag=태그명`) | X |
+| GET | `/v1/posts` | 게시글 목록 (페이지네이션, `?search=`, `?sort=latest\|likes\|views\|comments\|hot`, `?category_id=`, `?tag=태그명`, `?following=true`) | X |
 | POST | `/v1/posts` | 게시글 작성 (`category_id` 필수, `tags[]` 선택, 최대 5개) | O (이메일 인증) |
 | GET | `/v1/posts/{post_id}` | 게시글 상세 조회 | X |
 | PATCH | `/v1/posts/{post_id}` | 게시글 수정 | O (작성자) |
@@ -329,6 +384,7 @@ erDiagram
 | POST | `/v1/posts/{post_id}/comments` | 댓글 작성 (대댓글: `parent_id` 지원) | O |
 | PUT | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 수정 | O (작성자) |
 | DELETE | `/v1/posts/{post_id}/comments/{comment_id}` | 댓글 삭제 | O (작성자/관리자) |
+| GET | `/v1/posts/{post_id}/related` | 연관 게시글 추천 (`?limit=5`) | X |
 | POST | `/v1/posts/image` | 게시글 이미지 업로드 | O |
 
 #### 태그 API (`/v1/tags`)
@@ -357,6 +413,40 @@ erDiagram
 | ------ | -------- | ---- | ---- |
 | POST | `/v1/admin/users/{user_id}/suspend` | 사용자 기간 정지 (1~365일, 사유 필수) | O (관리자) |
 | DELETE | `/v1/admin/users/{user_id}/suspend` | 사용자 정지 해제 | O (관리자) |
+
+#### 팔로우 API (`/v1/users`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| POST | `/v1/users/{user_id}/follow` | 팔로우 | O (이메일 인증) |
+| DELETE | `/v1/users/{user_id}/follow` | 언팔로우 | O (이메일 인증) |
+| GET | `/v1/users/me/followers` | 내 팔로워 목록 | O |
+| GET | `/v1/users/me/following` | 내 팔로잉 목록 | O |
+
+#### DM API (`/v1/dms`)
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/dms` | DM 대화 목록 | O |
+| POST | `/v1/dms` | 대화 시작 (recipient_id) | O |
+| GET | `/v1/dms/unread-count` | 읽지 않은 대화 수 | O |
+| GET | `/v1/dms/{conversation_id}` | 메시지 목록 | O |
+| DELETE | `/v1/dms/{conversation_id}` | 대화 삭제 (soft delete) | O |
+| POST | `/v1/dms/{conversation_id}/messages` | 메시지 전송 | O |
+| PATCH | `/v1/dms/{conversation_id}/read` | 읽음 처리 | O |
+
+#### 투표 API
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| POST | `/v1/posts/{post_id}/poll/vote` | 투표 참여 (option_id) | O (이메일 인증) |
+
+#### 관리자 대시보드 API
+
+| Method | Endpoint | 설명 | 인증 |
+| ------ | -------- | ---- | ---- |
+| GET | `/v1/admin/dashboard` | 대시보드 요약 통계 | O (관리자) |
+| GET | `/v1/admin/users` | 사용자 관리 목록 (`?search=&offset=&limit=`) | O (관리자) |
 
 #### 응답 형식
 
@@ -428,7 +518,7 @@ sequenceDiagram
 
 ```text
 2-cho-community-fe/
-├── html/                    # 13개 정적 HTML 페이지
+├── html/                    # 17개 정적 HTML 페이지
 │   ├── post_list.html       # 메인 피드
 │   ├── post_detail.html     # 게시글 상세
 │   ├── post_write.html      # 게시글 작성
@@ -441,15 +531,20 @@ sequenceDiagram
 │   ├── verify-email.html    # 이메일 인증
 │   ├── notifications.html   # 알림
 │   ├── my-activity.html     # 내 활동
-│   └── user-profile.html    # 타 사용자 프로필
+│   ├── user-profile.html    # 타 사용자 프로필
+│   ├── admin_dashboard.html # 관리자 대시보드
+│   ├── admin_reports.html   # 관리자 신고 관리
+│   ├── dm_list.html         # DM 대화 목록
+│   └── dm_detail.html       # DM 대화 상세
 │
 ├── js/
 │   ├── app/                 # 페이지별 진입점
+│   ├── components/          # 재사용 컴포넌트 (MarkdownEditor)
 │   ├── controllers/         # 비즈니스 로직
 │   ├── models/              # API 통신 계층
 │   ├── views/               # DOM 렌더링
-│   ├── services/            # ApiService (HTTP 클라이언트)
-│   ├── utils/               # Logger, Validators, Formatters
+│   ├── services/            # ApiService, WebSocketService, DraftService, ThemeService
+│   ├── utils/               # Logger, Validators, Formatters, Markdown, Icons, Mention
 │   ├── config.js            # API_BASE_URL
 │   └── constants.js         # 엔드포인트, 메시지, 라우트
 │
@@ -463,9 +558,9 @@ sequenceDiagram
 
 #### MVC 패턴
 
-- **Model**: API 호출 담당. `AuthModel`, `PostModel`, `UserModel`, `CommentModel`, `NotificationModel`, `ActivityModel`
+- **Model**: API 호출 담당. `AuthModel`, `PostModel`, `UserModel`, `CommentModel`, `NotificationModel`, `ActivityModel`, `DMModel`, `TagModel`, `ReportModel`, `CategoryModel`
 - **View**: DOM 렌더링. 정적 메서드로 HTML 생성 및 이벤트 바인딩
-- **Controller**: 비즈니스 로직. Model과 View 조정, 상태 관리 (`MainController`, `NotificationController`, `MyActivityController`, `UserProfileController` 등)
+- **Controller**: 비즈니스 로직. Model과 View 조정, 상태 관리 (`MainController`, `NotificationController`, `MyActivityController`, `UserProfileController`, `AdminReportsController`, `AdminDashboardController`, `DMListController`, `DMDetailController` 등)
 
 #### 주요 패턴
 
@@ -518,6 +613,12 @@ sequenceDiagram
   - 연관 게시글: `GET /v1/posts/{id}/related?limit=5` — 태그 매칭 + 카테고리 + hot score 기반 추천
   - 팔로우 Rate Limit 보강: `POST/DELETE /v1/users/{id}/follow` (10 req/60s)
   - 연관 게시글 Rate Limit: `GET /v1/posts/{id}/related` (30 req/60s)
+
+- **03-08: DM 쪽지 시스템**
+  - DB: `dm_conversation` + `dm_message` 테이블, 참가자 MIN/MAX 정규화, UNIQUE 제약
+  - API: 대화 목록/생성/삭제, 메시지 전송/조회, 읽음 처리, 읽지 않은 수
+  - WebSocket `type: "dm"` 실시간 푸시 통합, 차단 사용자 간 대화 403
+  - 테스트: 14개, 전체 270 passed, 87% coverage
 
 - **03-08: 실시간 알림 (WebSocket) — 백엔드**
   - WebSocket Lambda 핸들러: `websocket/` 패키지 (`handler.py`, `dynamo.py`, `auth.py`)
