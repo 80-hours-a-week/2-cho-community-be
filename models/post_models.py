@@ -427,7 +427,7 @@ async def get_posts_with_details(
         where += " AND EXISTS (SELECT 1 FROM post_tag pt INNER JOIN tag t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name = %s)"
         params.append(tag)
 
-    # 추천 피드 JOIN 처리
+    # 추천 피드 JOIN 처리 (current_user_id 없으면 latest 폴백)
     upc_join = ""
     upc_select = ""
     join_params: list = []
@@ -435,6 +435,8 @@ async def get_posts_with_details(
         upc_join = "LEFT JOIN user_post_score upc ON p.id = upc.post_id AND upc.user_id = %s"
         upc_select = ", COALESCE(upc.combined_score, 0) AS combined_score"
         join_params = [current_user_id]
+    elif sort == "for_you":
+        sort = "latest"
 
     params.extend([limit, offset])
 

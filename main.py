@@ -80,10 +80,15 @@ async def lifespan(app: FastAPI):
     """
     await init_db()
     cleanup_task = asyncio.create_task(_periodic_token_cleanup())
-    feed_task = asyncio.create_task(_periodic_feed_score_refresh())
+    # Lambda 환경에서는 배경 작업 실행 불가 (단일 요청 수명)
+    # 프로덕션에서는 EventBridge 등 외부 트리거로 /v1/admin/feed/recompute 호출
+    feed_task = None
+    if os.environ.get("AWS_LAMBDA_EXEC") != "true":
+        feed_task = asyncio.create_task(_periodic_feed_score_refresh())
     yield
     cleanup_task.cancel()
-    feed_task.cancel()
+    if feed_task:
+        feed_task.cancel()
     await close_db()
 
 

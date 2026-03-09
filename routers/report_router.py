@@ -111,3 +111,21 @@ async def get_admin_users(
     return await admin_controller.get_users(
         current_user, request, offset, limit, search
     )
+
+
+# ============ 관리자 추천 피드 ============
+
+
+@report_router.post("/v1/admin/feed/recompute", status_code=status.HTTP_200_OK)
+async def recompute_feed_scores(
+    request: Request,
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """추천 피드 점수를 수동으로 재계산합니다 (관리자 전용).
+
+    프로덕션(Lambda)에서는 EventBridge 등 외부 트리거로 호출합니다.
+    """
+    from services.feed_service import FeedService
+
+    result = await FeedService.recompute_all_scores()
+    return {"status": "success", "data": result}

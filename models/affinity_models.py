@@ -67,7 +67,7 @@ async def get_user_signals(user_id: int, lookback_days: int = 30) -> UserSignals
                 SELECT pt.tag_id, COUNT(*) AS cnt
                 FROM comment c
                 INNER JOIN post_tag pt ON c.post_id = pt.post_id
-                WHERE c.user_id = %s AND c.deleted_at IS NULL
+                WHERE c.author_id = %s AND c.deleted_at IS NULL
                   AND c.created_at > NOW() - INTERVAL %s DAY
                 GROUP BY pt.tag_id
                 """,
@@ -83,9 +83,10 @@ async def get_user_signals(user_id: int, lookback_days: int = 30) -> UserSignals
                 FROM post_view_log pvl
                 INNER JOIN post p ON pvl.post_id = p.id AND p.deleted_at IS NULL
                 WHERE pvl.user_id = %s AND p.category_id IS NOT NULL
+                  AND pvl.created_at > NOW() - INTERVAL %s DAY
                 GROUP BY p.category_id
                 """,
-                (user_id,),
+                (user_id, lookback_days),
             )
             for row in await cur.fetchall():
                 signals.viewed_category_counts[row[0]] = row[1]
