@@ -2,6 +2,13 @@
 
 ## 2026-03 (Mar)
 
+- **03-09: 분산 Rate Limiter (DynamoDB)**
+  - Rate Limiter를 프로토콜 기반으로 리팩토링 (`RateLimiterProtocol` → `MemoryRateLimiter` / `DynamoDBRateLimiter`)
+  - DynamoDB Fixed Window Counter: 수평 확장된 Lambda 인스턴스 간 rate limit 상태 공유
+  - fail-open 정책: DynamoDB 장애 시 요청 허용 (가용성 우선)
+  - 팩토리 패턴: `RATE_LIMIT_BACKEND` 설정으로 백엔드 선택 (`memory` / `dynamodb`)
+  - 테스트: 15 cases (메모리 9 + DynamoDB 6)
+
 - **03-09: 추천 피드(For You Feed) — 개인화 정렬**
   - 사용자 친화도 기반 개인화 추천: 7개 신호(좋아요/북마크/댓글 태그, 조회 카테고리, 팔로우/좋아요/북마크 작성자)
   - 아키텍처: `affinity_models.py`(SQL) → `affinity_scorer.py`(순수 Python) → `feed_service.py`(배치)
