@@ -9,13 +9,13 @@ from utils.formatters import format_datetime
 
 logger = logging.getLogger(__name__)
 
-NotificationType = Literal["comment", "like", "mention", "follow"]
+NotificationType = Literal["comment", "like", "mention", "follow", "bookmark"]
 
 
 async def create_notification(
     user_id: int,
     notification_type: NotificationType,
-    post_id: int,
+    post_id: int | None,
     actor_id: int,
     comment_id: int | None = None,
     actor_nickname: str | None = None,

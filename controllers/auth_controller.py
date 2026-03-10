@@ -2,34 +2,27 @@
 
 JWT 기반 로그인, 로그아웃, 토큰 갱신, 사용자 인증 상태 확인,
 이메일 인증 등의 기능을 제공합니다.
+HTTP 관련 처리(쿠키, Request/Response)를 담당하고,
+비즈니스 로직은 AuthService에 위임합니다.
 """
 
-import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request, Response, status
 
 from core.config import settings
 from dependencies.request_context import get_request_timestamp
-from models import token_models, user_models, verification_models
+from models import verification_models
 from models.user_models import User
 from schemas.auth_schemas import LoginRequest
 from schemas.common import create_response, serialize_user
+from services.auth_service import AuthService
 from utils.email import send_email
 from utils.exceptions import bad_request_error
-from utils.jwt_utils import create_access_token, create_refresh_token
-from utils.password import verify_password
 
 logger = logging.getLogger(__name__)
 
 _REFRESH_COOKIE = "refresh_token"
-
-# 타이밍 공격 방지: 존재하지 않는 사용자에 대해서도 bcrypt 비교를 수행하여 응답 시간 차이로
-# 사용자 존재 여부가 노출되지 않도록 함
-_TIMING_ATTACK_DUMMY_HASH = (
-    "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxwKc.60VF.wdz.xGto8.H82o.f2y"
-)
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
@@ -77,50 +70,21 @@ async def login(
     """
     timestamp = get_request_timestamp(request)
 
-    user = await user_models.get_user_by_email(credentials.email)
-
-    password_valid = await asyncio.to_thread(
-        verify_password,
-        credentials.password,
-        user.password if user else _TIMING_ATTACK_DUMMY_HASH,
+    result = await AuthService.authenticate(
+        email=credentials.email,
+        password=credentials.password,
+        timestamp=timestamp,
     )
 
-    if not user or not password_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "unauthorized",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 정지된 사용자 로그인 차단
-    if user.is_suspended:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "account_suspended",
-                "message": "계정이 정지되었습니다.",
-                "suspended_until": user.suspended_until.strftime("%Y-%m-%dT%H:%M:%SZ") if user.suspended_until else None,
-                "suspended_reason": user.suspended_reason,
-                "timestamp": timestamp,
-            },
-        )
-
-    access_token = create_access_token(user_id=user.id)
-
-    raw_refresh = create_refresh_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.JWT_REFRESH_EXPIRE_DAYS
-    )
-    await token_models.create_refresh_token(user.id, raw_refresh, expires_at)
-
-    _set_refresh_cookie(response, raw_refresh)
+    _set_refresh_cookie(response, result.raw_refresh_token)
 
     return create_response(
         "LOGIN_SUCCESS",
         "로그인에 성공했습니다.",
-        data={"access_token": access_token, "user": serialize_user(user)},
+        data={
+            "access_token": result.access_token,
+            "user": serialize_user(result.user),
+        },
         timestamp=timestamp,
     )
 
@@ -141,8 +105,7 @@ async def logout(
     timestamp = get_request_timestamp(request)
 
     raw_refresh = request.cookies.get(_REFRESH_COOKIE)
-    if raw_refresh:
-        await token_models.delete_refresh_token(raw_refresh)
+    await AuthService.logout(raw_refresh)
 
     _clear_refresh_cookie(response)
 
@@ -175,56 +138,25 @@ async def refresh_token(request: Request, response: Response) -> dict:
             detail={"error": "refresh_token_missing", "timestamp": timestamp},
         )
 
-    # 만료된 토큰이면 내부에서 삭제 후 None 반환
-    token_record = await token_models.get_refresh_token(raw_refresh)
-    if not token_record:
-        _clear_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "refresh_token_invalid", "timestamp": timestamp},
+    try:
+        result = await AuthService.refresh_access_token(
+            refresh_token_value=raw_refresh,
+            timestamp=timestamp,
         )
-
-    user = await user_models.get_user_by_id(token_record["user_id"])
-    if not user:
+    except HTTPException:
+        # 토큰 유효하지 않거나 사용자 없음/정지 시 쿠키 삭제 후 재발생
         _clear_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "unauthorized", "timestamp": timestamp},
-        )
+        raise
 
-    # 정지된 사용자 토큰 갱신 차단
-    if user.is_suspended:
-        _clear_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "account_suspended",
-                "message": "계정이 정지되었습니다.",
-                "suspended_until": user.suspended_until.strftime("%Y-%m-%dT%H:%M:%SZ") if user.suspended_until else None,
-                "suspended_reason": user.suspended_reason,
-                "timestamp": timestamp,
-            },
-        )
-
-    # 토큰 회전: DELETE + INSERT를 단일 트랜잭션으로 묶어 원자성 보장
-    new_access_token = create_access_token(user_id=user.id)
-    new_raw_refresh = create_refresh_token()
-    new_expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.JWT_REFRESH_EXPIRE_DAYS
-    )
-    await token_models.rotate_refresh_token(
-        old_raw_token=raw_refresh,
-        new_raw_token=new_raw_refresh,
-        user_id=user.id,
-        new_expires_at=new_expires_at,
-    )
-
-    _set_refresh_cookie(response, new_raw_refresh)
+    _set_refresh_cookie(response, result.raw_refresh_token)
 
     return create_response(
         "TOKEN_REFRESHED",
         "토큰이 갱신되었습니다.",
-        data={"access_token": new_access_token, "user": serialize_user(user)},
+        data={
+            "access_token": result.access_token,
+            "user": serialize_user(result.user),
+        },
         timestamp=timestamp,
     )
 
