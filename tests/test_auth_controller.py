@@ -46,12 +46,12 @@ class TestLogin:
 
     @pytest.mark.asyncio
     @patch(
-        "controllers.auth_controller.user_models.get_user_by_email",
+        "services.auth_service.user_models.get_user_by_email",
         new_callable=AsyncMock,
     )
-    @patch("controllers.auth_controller.verify_password")
+    @patch("services.auth_service.verify_password")
     @patch(
-        "controllers.auth_controller.token_models.create_refresh_token",
+        "services.auth_service.token_models.create_refresh_token",
         new_callable=AsyncMock,
     )
     @patch("controllers.auth_controller.get_request_timestamp")
@@ -87,10 +87,10 @@ class TestLogin:
 
     @pytest.mark.asyncio
     @patch(
-        "controllers.auth_controller.user_models.get_user_by_email",
+        "services.auth_service.user_models.get_user_by_email",
         new_callable=AsyncMock,
     )
-    @patch("controllers.auth_controller.verify_password")
+    @patch("services.auth_service.verify_password")
     @patch("controllers.auth_controller.get_request_timestamp")
     async def test_login_invalid_password(
         self,
@@ -118,10 +118,10 @@ class TestLogin:
 
     @pytest.mark.asyncio
     @patch(
-        "controllers.auth_controller.user_models.get_user_by_email",
+        "services.auth_service.user_models.get_user_by_email",
         new_callable=AsyncMock,
     )
-    @patch("controllers.auth_controller.verify_password")
+    @patch("services.auth_service.verify_password")
     @patch("controllers.auth_controller.get_request_timestamp")
     async def test_login_user_not_found(
         self,
@@ -180,7 +180,7 @@ class TestLogout:
 
     @pytest.mark.asyncio
     @patch(
-        "controllers.auth_controller.token_models.delete_refresh_token",
+        "services.auth_service.token_models.delete_refresh_token",
         new_callable=AsyncMock,
     )
     @patch("controllers.auth_controller.get_request_timestamp")
