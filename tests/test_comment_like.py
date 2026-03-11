@@ -42,7 +42,7 @@ async def test_comment_like_duplicate(client: AsyncClient, authorized_user):
     await cli.post(f"/v1/posts/{post_id}/comments/{comment_id}/like")
     res = await cli.post(f"/v1/posts/{post_id}/comments/{comment_id}/like")
     assert res.status_code == 409
-    assert res.json()["detail"]["error"] == "already_liked_comment"
+    assert res.json()["detail"]["error"] == "already_comment_liked"
 
 
 @pytest.mark.asyncio
