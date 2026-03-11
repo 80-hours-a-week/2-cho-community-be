@@ -108,7 +108,7 @@ async def create_pool(args) -> aiomysql.Pool:
         charset="utf8mb4",
         autocommit=True,
     )
-    print(f"  커넥션 풀 생성 완료 (min=5, max=10)")
+    print("  커넥션 풀 생성 완료 (min=5, max=10)")
     return pool
 
 
@@ -599,7 +599,7 @@ async def seed_users(pool: aiomysql.Pool) -> None:
         if i % 10_000 == 0:
             print(f"    생성: {i:>6,} / {TOTAL_USERS:,}")
 
-    print(f"  사용자 INSERT 시작...")
+    print("  사용자 INSERT 시작...")
     inserted = await batch_insert_raw(
         pool, "user",
         ["email", "password", "nickname", "role", "email_verified", "created_at"],
