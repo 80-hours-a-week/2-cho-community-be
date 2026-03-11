@@ -1239,13 +1239,95 @@ async def seed_dms(pool: aiomysql.Pool) -> None:
 
 
 async def verify_data(pool: aiomysql.Pool) -> None:
-    """시딩 결과 검증 (테이블별 행 수 출력)."""
-    pass
+    """시딩 결과 검증 (테이블별 행 수 + 무결성)."""
+    tables = [
+        "user", "category", "tag", "post", "post_tag", "post_image",
+        "poll", "poll_option", "poll_vote",
+        "comment", "post_like", "post_bookmark", "comment_like", "post_view_log",
+        "user_follow", "user_block", "notification", "report",
+        "dm_conversation", "dm_message",
+    ]
+
+    print("  테이블별 행 수:")
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            for table in tables:
+                await cur.execute(f"SELECT COUNT(*) FROM {table}")
+                (count,) = await cur.fetchone()
+                print(f"    {table:.<25s} {count:>12,}")
+
+            # 무결성 검증 1: 고아 댓글 (parent_id가 존재하지 않는 comment 참조)
+            await cur.execute("""
+                SELECT COUNT(*) FROM comment c
+                WHERE c.parent_id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM comment p WHERE p.id = c.parent_id)
+            """)
+            (orphan_comments,) = await cur.fetchone()
+            if orphan_comments:
+                print(f"  ⚠ 고아 댓글: {orphan_comments:,}개")
+            else:
+                print("  ✓ 고아 댓글 없음")
+
+            # 무결성 검증 2: DM 정규화 (participant1_id < participant2_id)
+            await cur.execute("""
+                SELECT COUNT(*) FROM dm_conversation
+                WHERE participant1_id >= participant2_id
+            """)
+            (bad_dm,) = await cur.fetchone()
+            if bad_dm:
+                print(f"  ⚠ DM 정규화 위반: {bad_dm:,}개")
+            else:
+                print("  ✓ DM 정규화 정상")
+
+            # 무결성 검증 3: 대댓글이 1단계만인지 확인
+            await cur.execute("""
+                SELECT COUNT(*) FROM comment c
+                JOIN comment p ON c.parent_id = p.id
+                WHERE p.parent_id IS NOT NULL
+            """)
+            (nested_replies,) = await cur.fetchone()
+            if nested_replies:
+                print(f"  ⚠ 2단계 이상 대댓글: {nested_replies:,}개")
+            else:
+                print("  ✓ 대댓글 1단계만 존재")
 
 
 async def trigger_recompute(url: str) -> None:
-    """추천 피드 재계산 API 호출."""
-    pass
+    """추천 피드 점수 재계산 API 호출."""
+    print(f"\n  추천 피드 재계산: {url}/v1/admin/feed/recompute")
+
+    try:
+        import json
+        import urllib.request
+
+        # admin 로그인
+        login_data = json.dumps({
+            "email": "user1@example.com",
+            "password": "Test1234!",
+        }).encode()
+        login_req = urllib.request.Request(
+            f"{url}/v1/auth/login",
+            data=login_data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(login_req, timeout=30) as resp:
+            token_data = json.loads(resp.read())
+            access_token = token_data["access_token"]
+
+        # 재계산 호출 (대규모 데이터라 타임아웃 넉넉하게)
+        recompute_req = urllib.request.Request(
+            f"{url}/v1/admin/feed/recompute",
+            headers={"Authorization": f"Bearer {access_token}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(recompute_req, timeout=600) as resp:
+            result = json.loads(resp.read())
+            print(f"  ✓ 재계산 완료: {result}")
+
+    except Exception as e:
+        print(f"  ⚠ 재계산 실패: {e}")
+        print(f"  수동 실행: curl -X POST {url}/v1/admin/feed/recompute -H 'Authorization: Bearer <token>'")
 
 
 # ─────────────────────────────────────────────
