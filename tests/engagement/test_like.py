@@ -117,7 +117,7 @@ async def test_like_count_in_post_detail(client: AsyncClient, fake, post_for_eng
     # Assert
     assert detail.status_code == 200
     post_data = detail.json()["data"]["post"]
-    assert post_data["like_count"] >= 1
+    assert post_data["likes_count"] >= 1
     assert post_data["is_liked"] is True
 
 

@@ -150,7 +150,7 @@ async def test_blocked_user_comments_filtered(client, fake):
     await user1["client"].post(f"/v1/users/{user2['user_id']}/block")
 
     # Act — user1이 게시글 상세 조회 (댓글 포함)
-    res = await user1["client"].get(f"/v1/posts/{post['post_id']}/comments")
+    res = await user1["client"].get(f"/v1/posts/{post['post_id']}")
 
     # Assert — user2의 댓글이 필터링됨
     assert res.status_code == 200

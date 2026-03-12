@@ -98,7 +98,8 @@ async def test_login_with_deleted_account_returns_401(client: AsyncClient, fake)
     user = await create_verified_user(client, fake)
 
     # 회원 탈퇴 API 호출
-    res = await user["client"].delete(
+    res = await user["client"].request(
+        "DELETE",
         "/v1/users/me",
         json={"password": user["payload"]["password"], "agree": True},
     )

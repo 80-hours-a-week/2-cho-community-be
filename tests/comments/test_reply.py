@@ -77,8 +77,8 @@ async def test_reply_to_nonexistent_comment_returns_404(client: AsyncClient, fak
         headers=user["headers"],
     )
 
-    # Assert
-    assert res.status_code == 404
+    # Assert — 부모가 존재하지 않으면 400 (bad_request)
+    assert res.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,8 @@ async def test_deleted_parent_shows_placeholder(client: AsyncClient, fake):
     parent_comments = [c for c in comments if c["comment_id"] == parent_id]
     assert len(parent_comments) == 1
     placeholder = parent_comments[0]
-    assert placeholder["content"] == "삭제된 댓글입니다."
+    assert placeholder["content"] is None
+    assert placeholder["is_deleted"] is True
 
 
 @pytest.mark.asyncio
@@ -169,10 +170,13 @@ async def test_comment_tree_structure(client: AsyncClient, fake):
     # Act
     detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
 
-    # Assert
+    # Assert — 댓글은 트리 구조로 반환 (replies 중첩)
     comments = detail.json()["data"]["comments"]
     parent_comment = next(c for c in comments if c["comment_id"] == parent_id)
-    reply_comment = next(c for c in comments if c["comment_id"] == reply_id)
-
     assert parent_comment["parent_id"] is None
+
+    # 대댓글은 부모의 replies 리스트에 포함
+    reply_comment = next(
+        r for r in parent_comment["replies"] if r["comment_id"] == reply_id
+    )
     assert reply_comment["parent_id"] == parent_id

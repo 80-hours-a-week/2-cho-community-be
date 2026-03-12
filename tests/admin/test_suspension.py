@@ -186,7 +186,7 @@ async def test_suspended_user_refresh_returns_403(
     await _suspend_user_directly(user["user_id"])
 
     # Act — refresh 시도
-    res = await client.post("/v1/auth/token", cookies=cookies)
+    res = await client.post("/v1/auth/token/refresh", cookies=cookies)
 
     # Assert
     assert res.status_code == 403

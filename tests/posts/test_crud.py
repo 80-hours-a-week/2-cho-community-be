@@ -100,12 +100,12 @@ async def test_get_post_increments_view_count(client: AsyncClient, fake):
     # 첫 번째 조회
     res1 = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
     assert res1.status_code == 200
-    views_1 = res1.json()["data"]["post"]["views"]
+    views_1 = res1.json()["data"]["post"]["views_count"]
 
     # 두 번째 조회
     res2 = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
     assert res2.status_code == 200
-    views_2 = res2.json()["data"]["post"]["views"]
+    views_2 = res2.json()["data"]["post"]["views_count"]
 
     assert views_2 > views_1
 

@@ -18,7 +18,8 @@ async def test_withdraw_account_succeeds(client: AsyncClient, fake):
     user = await create_verified_user(client, fake)
 
     # Act
-    res = await user["client"].delete(
+    res = await user["client"].request(
+        "DELETE",
         "/v1/users/me",
         json={
             "password": user["payload"]["password"],
@@ -43,7 +44,8 @@ async def test_login_after_withdrawal_returns_401(client: AsyncClient, fake):
     user = await create_verified_user(client, fake)
 
     # 탈퇴 실행
-    del_res = await user["client"].delete(
+    del_res = await user["client"].request(
+        "DELETE",
         "/v1/users/me",
         json={
             "password": user["payload"]["password"],
@@ -73,7 +75,8 @@ async def test_get_profile_after_withdrawal_returns_404(client: AsyncClient, fak
     user_id = user["user_id"]
 
     # 탈퇴 실행
-    del_res = await user["client"].delete(
+    del_res = await user["client"].request(
+        "DELETE",
         "/v1/users/me",
         json={
             "password": user["payload"]["password"],

@@ -100,7 +100,7 @@ async def test_my_bookmarks_list(client: AsyncClient, fake, post_for_engagement)
 
     # Assert
     assert res.status_code == 200
-    bookmarks = res.json()["data"]["items"]
+    bookmarks = res.json()["data"]["posts"]
     post_ids = [b["post_id"] for b in bookmarks]
     assert post_id in post_ids
 

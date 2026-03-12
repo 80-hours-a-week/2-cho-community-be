@@ -116,8 +116,8 @@ async def test_follow_count_updates(client: AsyncClient, fake):
 
     # Assert
     assert profile_res.status_code == 200
-    profile = profile_res.json()["data"]
-    assert profile["follower_count"] >= 1
+    profile = profile_res.json()["data"]["user"]
+    assert profile["followers_count"] >= 1
 
     # Act -- 팔로잉 사용자 본인 정보 조회
     my_res = await client.get(
@@ -125,7 +125,7 @@ async def test_follow_count_updates(client: AsyncClient, fake):
         headers=user["headers"],
     )
     assert my_res.status_code == 200
-    my_data = my_res.json()["data"]
+    my_data = my_res.json()["data"]["user"]
     assert my_data["following_count"] >= 1
 
 
@@ -151,7 +151,7 @@ async def test_my_following_list(client: AsyncClient, fake):
 
     # Assert
     assert res.status_code == 200
-    items = res.json()["data"]["items"]
+    items = res.json()["data"]["following"]
     user_ids = [item["user_id"] for item in items]
     assert target["user_id"] in user_ids
 
@@ -178,7 +178,7 @@ async def test_my_followers_list(client: AsyncClient, fake):
 
     # Assert
     assert res.status_code == 200
-    items = res.json()["data"]["items"]
+    items = res.json()["data"]["followers"]
     user_ids = [item["user_id"] for item in items]
     assert user["user_id"] in user_ids
 
@@ -203,7 +203,7 @@ async def test_follow_creates_notification(client: AsyncClient, fake):
         headers=target["headers"],
     )
     assert notif_res.status_code == 200
-    notifications = notif_res.json()["data"]["items"]
+    notifications = notif_res.json()["data"]["notifications"]
     follow_notifs = [n for n in notifications if n["type"] == "follow"]
     assert len(follow_notifs) >= 1
 
@@ -235,7 +235,7 @@ async def test_mutual_follow_status(client: AsyncClient, fake):
         headers=user_b["headers"],
     )
     assert profile_a.status_code == 200
-    assert profile_a.json()["data"]["is_following"] is True
+    assert profile_a.json()["data"]["user"]["is_following"] is True
 
     # Assert -- B의 프로필을 A가 조회하면 is_following=True
     profile_b = await client.get(
@@ -243,4 +243,4 @@ async def test_mutual_follow_status(client: AsyncClient, fake):
         headers=user_a["headers"],
     )
     assert profile_b.status_code == 200
-    assert profile_b.json()["data"]["is_following"] is True
+    assert profile_b.json()["data"]["user"]["is_following"] is True

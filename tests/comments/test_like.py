@@ -127,5 +127,5 @@ async def test_comment_like_status_in_post_detail(client: AsyncClient, fake):
     assert detail.status_code == 200
     comments = detail.json()["data"]["comments"]
     target = next(c for c in comments if c["comment_id"] == comment_id)
-    assert target["like_count"] >= 1
+    assert target["likes_count"] >= 1
     assert target["is_liked"] is True

@@ -53,7 +53,7 @@ async def test_like_creates_notification_for_post_author(
 
     # Act — 다른 사용자가 좋아요
     like_res = await client.post(
-        f"/v1/posts/{post_id}/like", headers=other["headers"],
+        f"/v1/posts/{post_id}/likes", headers=other["headers"],
     )
     assert like_res.status_code == 201
 
@@ -99,7 +99,7 @@ async def test_self_action_does_not_create_notification(client, fake):
 
     # Act — 본인이 좋아요
     like_res = await client.post(
-        f"/v1/posts/{post_id}/like", headers=user["headers"],
+        f"/v1/posts/{post_id}/likes", headers=user["headers"],
     )
     assert like_res.status_code == 201
 
