@@ -5,9 +5,11 @@ TESTING=true 환경에서만 main.py에 등록됩니다.
 """
 
 from fastapi import APIRouter
+from typing import Literal
+
 from pydantic import BaseModel
 
-from database.connection import get_connection
+from database.connection import get_connection, transactional
 
 test_router = APIRouter(prefix="/v1/test", tags=["test"])
 
@@ -18,7 +20,7 @@ class VerifyEmailRequest(BaseModel):
 
 class SetRoleRequest(BaseModel):
     user_id: int
-    role: str = "admin"
+    role: Literal["user", "admin"] = "admin"
 
 
 class SuspendRequest(BaseModel):
@@ -34,53 +36,45 @@ class UnsuspendRequest(BaseModel):
 @test_router.post("/users/verify-email")
 async def verify_email(req: VerifyEmailRequest):
     """이메일 인증 바이패스"""
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE user SET email_verified = 1 WHERE id = %s",
-                (req.user_id,),
-            )
-            await conn.commit()
+    async with transactional() as cur:
+        await cur.execute(
+            "UPDATE user SET email_verified = 1 WHERE id = %s",
+            (req.user_id,),
+        )
     return {"code": "EMAIL_VERIFIED", "data": {"user_id": req.user_id}}
 
 
 @test_router.post("/users/set-role")
 async def set_role(req: SetRoleRequest):
     """사용자 역할 변경 (admin 등)"""
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE user SET role = %s WHERE id = %s",
-                (req.role, req.user_id),
-            )
-            await conn.commit()
+    async with transactional() as cur:
+        await cur.execute(
+            "UPDATE user SET role = %s WHERE id = %s",
+            (req.role, req.user_id),
+        )
     return {"code": "ROLE_UPDATED", "data": {"user_id": req.user_id, "role": req.role}}
 
 
 @test_router.post("/users/suspend")
 async def suspend_user(req: SuspendRequest):
     """사용자 정지"""
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE user SET suspended_until = DATE_ADD(NOW(), INTERVAL %s DAY), "
-                "suspended_reason = %s WHERE id = %s",
-                (req.duration_days, req.reason, req.user_id),
-            )
-            await conn.commit()
+    async with transactional() as cur:
+        await cur.execute(
+            "UPDATE user SET suspended_until = DATE_ADD(NOW(), INTERVAL %s DAY), "
+            "suspended_reason = %s WHERE id = %s",
+            (req.duration_days, req.reason, req.user_id),
+        )
     return {"code": "USER_SUSPENDED", "data": {"user_id": req.user_id}}
 
 
 @test_router.delete("/users/suspend")
 async def unsuspend_user(req: UnsuspendRequest):
     """사용자 정지 해제"""
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE user SET suspended_until = NULL, suspended_reason = NULL WHERE id = %s",
-                (req.user_id,),
-            )
-            await conn.commit()
+    async with transactional() as cur:
+        await cur.execute(
+            "UPDATE user SET suspended_until = NULL, suspended_reason = NULL WHERE id = %s",
+            (req.user_id,),
+        )
     return {"code": "USER_UNSUSPENDED", "data": {"user_id": req.user_id}}
 
 
