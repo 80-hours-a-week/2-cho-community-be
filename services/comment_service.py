@@ -132,15 +132,7 @@ class CommentService:
                     comment_id=comment.id,
                 )
 
-        # 멘션 알림 — 이미 comment 알림을 받은 사용자는 제외
-        already_notified = {user_id}  # 자기 자신 제외
-        if comment.parent_id and parent_id is not None:
-            if parent_comment and parent_comment.author_id:
-                already_notified.add(parent_comment.author_id)
-        else:
-            if post.author_id:
-                already_notified.add(post.author_id)
-
+        # 멘션 알림 (자기 자신 제외는 create_notification 내부에서 처리)
         nicknames = extract_mentions(content)
         for nickname in nicknames:
             try:
@@ -148,8 +140,7 @@ class CommentService:
             except Exception:
                 logger.warning("멘션 사용자 조회 실패: %s", nickname, exc_info=True)
                 continue
-            if mentioned_user and mentioned_user.id not in already_notified:
-                already_notified.add(mentioned_user.id)
+            if mentioned_user:
                 await safe_notify(
                     user_id=mentioned_user.id,
                     notification_type="mention",
