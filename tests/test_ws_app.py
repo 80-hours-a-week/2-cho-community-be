@@ -1,0 +1,13 @@
+# tests/test_ws_app.py
+import pytest
+from fastapi.testclient import TestClient
+
+from ws_app import app
+
+
+def test_ws_app_health():
+    """ws_app health 엔드포인트 테스트"""
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["service"] == "websocket"
