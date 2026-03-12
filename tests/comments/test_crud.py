@@ -150,7 +150,7 @@ async def test_delete_comment_soft_deletes(client: AsyncClient, fake):
     # 게시글 상세에서 댓글이 보이지 않아야 함
     detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
     comments = detail.json()["data"]["comments"]
-    comment_ids = [c["id"] for c in comments]
+    comment_ids = [c["comment_id"] for c in comments]
     assert comment_id not in comment_ids
 
 

@@ -125,7 +125,7 @@ async def test_blocked_user_posts_excluded_from_list(client, fake):
     # Assert — user2의 게시글이 목록에 없어야 함
     assert res.status_code == 200
     posts = res.json()["data"]["posts"]
-    post_author_ids = [p["author"]["id"] for p in posts]
+    post_author_ids = [p["author"]["user_id"] for p in posts]
     assert user2["user_id"] not in post_author_ids
 
 
@@ -143,17 +143,17 @@ async def test_blocked_user_comments_filtered(client, fake):
 
     # user2가 댓글 작성
     await create_test_comment(
-        user2["client"], user2["headers"], post["id"], content="차단될 댓글"
+        user2["client"], user2["headers"], post["post_id"], content="차단될 댓글"
     )
 
     # user1이 user2 차단
     await user1["client"].post(f"/v1/users/{user2['user_id']}/block")
 
     # Act — user1이 게시글 상세 조회 (댓글 포함)
-    res = await user1["client"].get(f"/v1/posts/{post['id']}/comments")
+    res = await user1["client"].get(f"/v1/posts/{post['post_id']}/comments")
 
     # Assert — user2의 댓글이 필터링됨
     assert res.status_code == 200
     comments = res.json()["data"]["comments"]
-    comment_author_ids = [c["author"]["id"] for c in comments if c.get("author")]
+    comment_author_ids = [c["author"]["user_id"] for c in comments if c.get("author")]
     assert user2["user_id"] not in comment_author_ids

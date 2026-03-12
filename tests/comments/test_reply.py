@@ -115,7 +115,7 @@ async def test_deleted_parent_shows_placeholder(client: AsyncClient, fake):
     # Assert — 게시글 상세에서 부모가 플레이스홀더로 남아 있어야 함
     detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
     comments = detail.json()["data"]["comments"]
-    parent_comments = [c for c in comments if c["id"] == parent_id]
+    parent_comments = [c for c in comments if c["comment_id"] == parent_id]
     assert len(parent_comments) == 1
     placeholder = parent_comments[0]
     assert placeholder["content"] == "삭제된 댓글입니다."
@@ -141,7 +141,7 @@ async def test_deleted_parent_without_replies_hidden(client: AsyncClient, fake):
     # Assert — 게시글 상세에서 해당 댓글이 보이지 않아야 함
     detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
     comments = detail.json()["data"]["comments"]
-    comment_ids = [c["id"] for c in comments]
+    comment_ids = [c["comment_id"] for c in comments]
     assert parent_id not in comment_ids
 
 
@@ -171,8 +171,8 @@ async def test_comment_tree_structure(client: AsyncClient, fake):
 
     # Assert
     comments = detail.json()["data"]["comments"]
-    parent_comment = next(c for c in comments if c["id"] == parent_id)
-    reply_comment = next(c for c in comments if c["id"] == reply_id)
+    parent_comment = next(c for c in comments if c["comment_id"] == parent_id)
+    reply_comment = next(c for c in comments if c["comment_id"] == reply_id)
 
     assert parent_comment["parent_id"] is None
     assert reply_comment["parent_id"] == parent_id

@@ -154,7 +154,7 @@ async def create_verified_user(client: AsyncClient, fake: Faker, **overrides) ->
 
     return {
         "client": auth_client,
-        "user_id": user_info["id"],
+        "user_id": user_info["user_id"],
         "email": payload["email"],
         "nickname": user_info["nickname"],
         "token": access_token,

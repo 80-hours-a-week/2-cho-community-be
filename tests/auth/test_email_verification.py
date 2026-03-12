@@ -43,7 +43,7 @@ async def _create_unverified_user(client: AsyncClient, fake) -> dict:
 
     return {
         "client": auth_client,
-        "user_id": user_info["id"],
+        "user_id": user_info["user_id"],
         "email": payload["email"],
         "nickname": user_info["nickname"],
         "token": access_token,
@@ -165,7 +165,7 @@ async def test_unverified_user_cannot_create_comment(client: AsyncClient, fake):
         "/v1/posts/",
         json={"title": "테스트 게시글", "content": "내용", "category_id": 1},
     )
-    post_id = post.json()["data"]["id"]
+    post_id = post.json()["data"]["post_id"]
 
     unverified = await _create_unverified_user(client, fake)
 
@@ -186,7 +186,7 @@ async def test_unverified_user_cannot_like_post(client: AsyncClient, fake):
         "/v1/posts/",
         json={"title": "테스트 게시글", "content": "내용", "category_id": 1},
     )
-    post_id = post.json()["data"]["id"]
+    post_id = post.json()["data"]["post_id"]
 
     unverified = await _create_unverified_user(client, fake)
 
