@@ -208,6 +208,141 @@ async def test_follow_creates_notification(client: AsyncClient, fake):
     assert len(follow_notifs) >= 1
 
 
+# ---------------------------------------------------------------------------
+# 특정 사용자의 팔로잉/팔로워 공개 목록 (GET /{userId}/following, /{userId}/followers)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_user_following_list(client: AsyncClient, fake):
+    """특정 사용자의 팔로잉 목록을 조회할 수 있다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    target_a = await create_verified_user(client, fake)
+    target_b = await create_verified_user(client, fake)
+
+    # user가 두 명을 팔로우
+    await client.post(
+        f"/v1/users/{target_a['user_id']}/follow",
+        headers=user["headers"],
+    )
+    await client.post(
+        f"/v1/users/{target_b['user_id']}/follow",
+        headers=user["headers"],
+    )
+
+    # Act -- 다른 사용자가 user의 팔로잉 목록 조회
+    res = await client.get(
+        f"/v1/users/{user['user_id']}/following",
+        headers=target_a["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    data = res.json()["data"]
+    following = data["following"]
+    assert len(following) == 2
+    user_ids = [f["user_id"] for f in following]
+    assert target_a["user_id"] in user_ids
+    assert target_b["user_id"] in user_ids
+    assert "pagination" in data
+
+
+@pytest.mark.asyncio
+async def test_user_followers_list(client: AsyncClient, fake):
+    """특정 사용자의 팔로워 목록을 조회할 수 있다."""
+    # Arrange
+    target = await create_verified_user(client, fake)
+    follower_a = await create_verified_user(client, fake)
+    follower_b = await create_verified_user(client, fake)
+
+    # 두 명이 target을 팔로우
+    await client.post(
+        f"/v1/users/{target['user_id']}/follow",
+        headers=follower_a["headers"],
+    )
+    await client.post(
+        f"/v1/users/{target['user_id']}/follow",
+        headers=follower_b["headers"],
+    )
+
+    # Act -- target의 팔로워 목록 조회
+    res = await client.get(
+        f"/v1/users/{target['user_id']}/followers",
+        headers=follower_a["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    data = res.json()["data"]
+    followers = data["followers"]
+    assert len(followers) == 2
+    user_ids = [f["user_id"] for f in followers]
+    assert follower_a["user_id"] in user_ids
+    assert follower_b["user_id"] in user_ids
+
+
+@pytest.mark.asyncio
+async def test_user_following_list_pagination(client: AsyncClient, fake):
+    """팔로잉 목록에 페이지네이션이 동작한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    target = await create_verified_user(client, fake)
+
+    await client.post(
+        f"/v1/users/{target['user_id']}/follow",
+        headers=user["headers"],
+    )
+
+    # Act -- limit=1로 조회
+    res = await client.get(
+        f"/v1/users/{user['user_id']}/following?offset=0&limit=1",
+        headers=target["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert len(data["following"]) == 1
+    assert "pagination" in data
+
+
+@pytest.mark.asyncio
+async def test_user_following_empty_list(client: AsyncClient, fake):
+    """팔로잉이 없으면 빈 배열을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+
+    # Act
+    res = await client.get(
+        f"/v1/users/{user['user_id']}/following",
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    assert res.json()["data"]["following"] == []
+
+
+@pytest.mark.asyncio
+async def test_user_followers_without_auth_returns_200(client: AsyncClient, fake):
+    """미인증 사용자도 팔로워 목록을 조회할 수 있다 (공개 API)."""
+    # Arrange
+    target = await create_verified_user(client, fake)
+    follower = await create_verified_user(client, fake)
+    await client.post(
+        f"/v1/users/{target['user_id']}/follow",
+        headers=follower["headers"],
+    )
+
+    # Act -- 인증 없이 조회
+    res = await client.get(f"/v1/users/{target['user_id']}/followers")
+
+    # Assert
+    assert res.status_code == 200
+    assert len(res.json()["data"]["followers"]) == 1
+
+
 @pytest.mark.asyncio
 async def test_mutual_follow_status(client: AsyncClient, fake):
     """양쪽이 서로 팔로우하면 상호 팔로우 상태가 된다."""

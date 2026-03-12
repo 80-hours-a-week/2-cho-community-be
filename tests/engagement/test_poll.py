@@ -270,3 +270,312 @@ async def test_vote_without_auth_returns_401(client: AsyncClient, fake):
 
     # Assert
     assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# 투표 취소 (DELETE)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cancel_vote_returns_200(client: AsyncClient, fake):
+    """투표 취소에 성공하면 200을 반환하고, 이후 my_vote가 None이 된다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_id = await _get_poll_option_id(client, user["headers"], post_id)
+
+    # 먼저 투표
+    vote_res = await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_id},
+        headers=user["headers"],
+    )
+    assert vote_res.status_code == 200
+
+    # Act -- 투표 취소
+    res = await client.request(
+        "DELETE",
+        f"/v1/posts/{post_id}/poll/vote",
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    assert res.json()["code"] == "POLL_VOTE_CANCELLED"
+
+    # 상세 조회로 확인
+    detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
+    poll = detail.json()["data"]["post"]["poll"]
+    assert poll["my_vote"] is None
+    assert poll["total_votes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_cancel_vote_without_vote_returns_404(client: AsyncClient, fake):
+    """투표하지 않은 상태에서 취소하면 404를 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+
+    # Act -- 투표 없이 취소 요청
+    res = await client.request(
+        "DELETE",
+        f"/v1/posts/{post_id}/poll/vote",
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cancel_vote_expired_poll_returns_400(client: AsyncClient, fake):
+    """만료된 투표의 취소 시 400을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    post_data = await _create_post_with_poll(
+        client, user["headers"], expires_at=past
+    )
+    post_id = post_data["post_id"]
+
+    # Act
+    res = await client.request(
+        "DELETE",
+        f"/v1/posts/{post_id}/poll/vote",
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_cancel_vote_without_auth_returns_401(client: AsyncClient, fake):
+    """미인증 사용자의 투표 취소 시 401을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+
+    # Act
+    res = await client.request(
+        "DELETE",
+        f"/v1/posts/{post_id}/poll/vote",
+    )
+
+    # Assert
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_cancel_then_revote(client: AsyncClient, fake):
+    """투표 취소 후 다시 투표할 수 있다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_0 = await _get_poll_option_id(client, user["headers"], post_id, index=0)
+    option_1 = await _get_poll_option_id(client, user["headers"], post_id, index=1)
+
+    # 첫 번째 투표
+    await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_0},
+        headers=user["headers"],
+    )
+
+    # 취소
+    cancel_res = await client.request(
+        "DELETE",
+        f"/v1/posts/{post_id}/poll/vote",
+        headers=user["headers"],
+    )
+    assert cancel_res.status_code == 200
+
+    # Act -- 다른 옵션으로 재투표
+    res = await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_1},
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
+    poll = detail.json()["data"]["post"]["poll"]
+    assert poll["my_vote"] == option_1
+    assert poll["total_votes"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 투표 변경 (PUT)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_change_vote_returns_200(client: AsyncClient, fake):
+    """투표 변경에 성공하면 200을 반환하고, my_vote가 변경된다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_0 = await _get_poll_option_id(client, user["headers"], post_id, index=0)
+    option_1 = await _get_poll_option_id(client, user["headers"], post_id, index=1)
+
+    # 첫 번째 투표
+    vote_res = await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_0},
+        headers=user["headers"],
+    )
+    assert vote_res.status_code == 200
+
+    # Act -- 투표 변경
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_1},
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 200
+    assert res.json()["code"] == "POLL_VOTE_CHANGED"
+
+    # 상세 조회로 확인
+    detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
+    poll = detail.json()["data"]["post"]["poll"]
+    assert poll["my_vote"] == option_1
+    assert poll["total_votes"] == 1
+
+
+@pytest.mark.asyncio
+async def test_change_vote_without_vote_returns_404(client: AsyncClient, fake):
+    """투표하지 않은 상태에서 변경하면 404를 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_id = await _get_poll_option_id(client, user["headers"], post_id)
+
+    # Act
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_id},
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_change_vote_invalid_option_returns_400(client: AsyncClient, fake):
+    """존재하지 않는 옵션으로 변경하면 400을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_id = await _get_poll_option_id(client, user["headers"], post_id)
+
+    # 먼저 투표
+    await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_id},
+        headers=user["headers"],
+    )
+
+    # Act -- 유효하지 않은 옵션 ID로 변경
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": 999999},
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_change_vote_expired_poll_returns_400(client: AsyncClient, fake):
+    """만료된 투표를 변경하면 400을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    post_data = await _create_post_with_poll(
+        client, user["headers"], expires_at=past
+    )
+    post_id = post_data["post_id"]
+
+    # Act
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": 1},
+        headers=user["headers"],
+    )
+
+    # Assert
+    assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_change_vote_without_auth_returns_401(client: AsyncClient, fake):
+    """미인증 사용자의 투표 변경 시 401을 반환한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+
+    # Act
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": 1},
+    )
+
+    # Assert
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_change_vote_preserves_total_votes(client: AsyncClient, fake):
+    """투표 변경 시 총 투표 수는 변하지 않고, 옵션별 수가 이동한다."""
+    # Arrange
+    user = await create_verified_user(client, fake)
+    other = await create_verified_user(client, fake)
+    post_data = await _create_post_with_poll(client, user["headers"])
+    post_id = post_data["post_id"]
+    option_0 = await _get_poll_option_id(client, user["headers"], post_id, index=0)
+    option_1 = await _get_poll_option_id(client, user["headers"], post_id, index=1)
+
+    # 두 사용자가 같은 옵션에 투표
+    await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_0},
+        headers=user["headers"],
+    )
+    await client.post(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_0},
+        headers=other["headers"],
+    )
+
+    # Act -- user가 option_1로 변경
+    res = await client.put(
+        f"/v1/posts/{post_id}/poll/vote",
+        json={"option_id": option_1},
+        headers=user["headers"],
+    )
+    assert res.status_code == 200
+
+    # Assert
+    detail = await client.get(f"/v1/posts/{post_id}", headers=user["headers"])
+    poll = detail.json()["data"]["post"]["poll"]
+    assert poll["total_votes"] == 2
+
+    # 옵션별 확인
+    opt_map = {opt["option_id"]: opt["vote_count"] for opt in poll["options"]}
+    assert opt_map[option_0] == 1
+    assert opt_map[option_1] == 1

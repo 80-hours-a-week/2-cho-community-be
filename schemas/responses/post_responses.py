@@ -47,3 +47,4 @@ class PostListResult(BaseModel):
     posts: list[PostSummary]
     total_count: int
     has_more: bool
+    effective_sort: str | None = None

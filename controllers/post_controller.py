@@ -79,18 +79,24 @@ async def get_posts(
         following=following,
     )
 
+    response_data = {
+        "posts": [p.model_dump() for p in result.posts],
+        "pagination": {
+            "offset": offset,
+            "limit": limit,
+            "total_count": result.total_count,
+            "has_more": result.has_more,
+        },
+    }
+
+    # 추천 피드 폴백 시 실제 적용된 정렬 방식 전달
+    if result.effective_sort is not None:
+        response_data["effective_sort"] = result.effective_sort
+
     return create_response(
         "POSTS_RETRIEVED",
         "게시글 목록 조회에 성공했습니다.",
-        data={
-            "posts": [p.model_dump() for p in result.posts],
-            "pagination": {
-                "offset": offset,
-                "limit": limit,
-                "total_count": result.total_count,
-                "has_more": result.has_more,
-            },
-        },
+        data=response_data,
         timestamp=timestamp,
     )
 

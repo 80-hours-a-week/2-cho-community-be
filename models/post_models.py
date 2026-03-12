@@ -13,7 +13,7 @@ from schemas.common import build_author_dict
 
 
 # SQL Injection 방지: 허용된 컬럼명 whitelist
-ALLOWED_POST_COLUMNS = {'title', 'content', 'image_url', 'category_id'}
+ALLOWED_POST_COLUMNS = {'title', 'content', 'image_url', 'category_id', 'updated_at'}
 
 # FULLTEXT BOOLEAN MODE 특수문자 이스케이프 패턴
 _FULLTEXT_SPECIAL_CHARS = re.compile(r'([+\-><()~*"@])')
@@ -237,13 +237,16 @@ async def update_post(
     """
     updates: list[str] = []
     params: list[str | int] = []
+    content_changed = False
 
     if title is not None:
         updates.append("title = %s")
         params.append(title)
+        content_changed = True
     if content is not None:
         updates.append("content = %s")
         params.append(content)
+        content_changed = True
     if image_url is not None:
         updates.append("image_url = %s")
         params.append(image_url)
@@ -253,6 +256,10 @@ async def update_post(
 
     if not updates:
         return await get_post_by_id(post_id)
+
+    # 제목/내용 변경 시에만 수정 시간 기록
+    if content_changed:
+        updates.append("updated_at = NOW()")
 
     # SQL Injection 방지: 컬럼명 검증
     for update_clause in updates:
