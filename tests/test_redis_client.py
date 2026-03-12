@@ -2,6 +2,8 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
+pytest.importorskip("redis", reason="redis는 K8s optional dependency")
+
 
 @pytest.mark.asyncio
 async def test_get_redis_returns_client():
