@@ -180,13 +180,13 @@ async def test_suspended_user_refresh_returns_403(
         json={"email": user["email"], "password": user["payload"]["password"]},
     )
     assert login_res.status_code == 200
-    cookies = login_res.cookies
 
     # 정지 처리
     await _suspend_user_directly(user["user_id"])
 
-    # Act — refresh 시도
-    res = await client.post("/v1/auth/token/refresh", cookies=cookies)
+    # Act — refresh 시도 (로그인 응답의 쿠키를 클라이언트에 설정)
+    client.cookies.update(login_res.cookies)
+    res = await client.post("/v1/auth/token/refresh")
 
     # Assert
     assert res.status_code == 403
