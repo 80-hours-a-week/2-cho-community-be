@@ -4,7 +4,7 @@ import logging
 
 from typing import Dict, List, Optional
 
-from models import post_models, tag_models, poll_models, follow_models, notification_models
+from models import post_models, tag_models, poll_models, follow_models, notification_models, category_models
 from schemas.responses.post_responses import PostListResult
 from models.user_models import User
 from models.like_models import get_like
@@ -109,6 +109,7 @@ class PostService:
             posts=posts_data,  # type: ignore[arg-type]
             total_count=total_count,
             has_more=has_more,
+            effective_sort=effective_sort if effective_sort != sort else None,
         )
 
     @staticmethod
@@ -219,13 +220,15 @@ class PostService:
     ) -> int:
         """게시글 생성.
 
-        공지사항 카테고리(id=4)는 관리자만 작성 가능합니다.
+        공지사항 카테고리는 관리자만 작성 가능합니다.
         """
-        # 공지사항 카테고리는 관리자만 사용 가능
-        if post_data.category_id == 4 and not is_admin:
-            raise forbidden_error(
-                "create", "", "공지사항은 관리자만 작성할 수 있습니다."
-            )
+        # 공지사항 카테고리는 관리자만 사용 가능 (slug 기반 검증)
+        if post_data.category_id is not None and not is_admin:
+            category = await category_models.get_category_by_id(post_data.category_id)
+            if category and category.slug == "notice":
+                raise forbidden_error(
+                    "create", "", "공지사항은 관리자만 작성할 수 있습니다."
+                )
 
         # image_urls 우선, 없으면 image_url 단일 필드 사용 (하위 호환)
         primary_image_url = post_data.image_url
