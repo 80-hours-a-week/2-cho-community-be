@@ -13,7 +13,9 @@ from models.block_models import get_blocked_user_ids
 from schemas.post_schemas import CreatePostRequest
 from utils.formatters import format_datetime
 from utils.error_codes import ErrorCode
-from utils.exceptions import not_found_error, forbidden_error, bad_request_error
+from utils.exceptions import not_found_error, forbidden_error, bad_request_error, safe_notify
+from utils.mention import extract_mentions
+from models.user_models import get_user_by_nickname
 
 
 class PostService:
@@ -274,6 +276,25 @@ class PostService:
             logging.getLogger(__name__).warning(
                 "팔로우 알림 생성 실패", exc_info=True
             )
+
+        # 게시글 본문 멘션 알림 (자기 자신 제외는 create_notification 내부에서 처리)
+        nicknames = extract_mentions(post_data.content)
+        for nickname in nicknames:
+            try:
+                mentioned_user = await get_user_by_nickname(nickname)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "멘션 사용자 조회 실패: %s", nickname, exc_info=True
+                )
+                continue
+            if mentioned_user:
+                await safe_notify(
+                    user_id=mentioned_user.id,
+                    notification_type="mention",
+                    actor_id=user_id,
+                    actor_nickname=actor_nickname,
+                    post_id=post.id,
+                )
 
         return post.id
 
