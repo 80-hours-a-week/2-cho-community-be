@@ -107,10 +107,10 @@ async def test_following_feed_sorting(client, fake):
     user2 = await create_verified_user(client, fake)
 
     # user2가 게시글 2개 작성
-    post_first = await create_test_post(
+    await create_test_post(
         client, user2["headers"], title="첫 번째 글"
     )
-    post_second = await create_test_post(
+    await create_test_post(
         client, user2["headers"], title="두 번째 글"
     )
 

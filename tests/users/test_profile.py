@@ -3,7 +3,7 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import create_verified_user, _make_user_payload
+from tests.conftest import create_verified_user
 
 
 # ---------------------------------------------------------------------------

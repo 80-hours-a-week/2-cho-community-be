@@ -5,9 +5,8 @@ get_current_user, require_verified_email, require_admin, get_optional_user의
 """
 
 import pytest
-import pytest_asyncio
 
-from tests.conftest import create_verified_user, create_admin_user
+from tests.conftest import create_verified_user
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +38,6 @@ async def test_unverified_email_write_returns_403(client, fake):
     """이메일 미인증 사용자가 게시글 작성 시 403을 반환해야 한다."""
     # Arrange — 이메일 인증 없이 회원가입 + 로그인
     from tests.conftest import _make_user_payload
-    from database.connection import get_connection
 
     payload = _make_user_payload(fake)
     signup_res = await client.post("/v1/users/", data=payload)

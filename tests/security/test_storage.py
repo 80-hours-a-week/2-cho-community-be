@@ -6,11 +6,10 @@ tmp_path + monkeypatch로 실제 파일시스템을 격리한다.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 
-from utils.storage import save_uploaded_file, delete_file, UPLOAD_DIR
+from utils.storage import save_uploaded_file, delete_file
 
 
 # ---------------------------------------------------------------------------

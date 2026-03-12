@@ -65,7 +65,7 @@ async def test_pinned_posts_appear_first_in_list(client: AsyncClient, fake):
     admin = await create_admin_user(client, fake)
 
     # 일반 게시글 생성
-    normal_post = await create_test_post(
+    await create_test_post(
         client, admin["headers"], title="일반 게시글입니다"
     )
     # 고정할 게시글 생성

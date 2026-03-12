@@ -4,7 +4,6 @@
 """
 
 import pytest
-import pytest_asyncio
 
 from tests.conftest import (
     create_verified_user,
@@ -113,7 +112,7 @@ async def test_blocked_user_posts_excluded_from_list(client, fake):
     user2 = await create_verified_user(client, fake)
 
     # user2가 게시글 작성
-    post = await create_test_post(
+    await create_test_post(
         user2["client"], user2["headers"], title="차단 테스트 게시글"
     )
 

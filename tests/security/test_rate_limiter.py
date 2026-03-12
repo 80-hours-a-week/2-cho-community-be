@@ -4,7 +4,6 @@ DB 없이 인메모리 Rate Limiter의 핵심 동작을 검증한다.
 """
 
 import pytest
-from unittest.mock import patch
 from datetime import datetime, timedelta
 
 from middleware.rate_limiter_memory import MemoryRateLimiter

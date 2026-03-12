@@ -15,7 +15,7 @@ from tests.conftest import create_verified_user
 async def test_search_users_by_nickname(client: AsyncClient, fake):
     """GET /v1/users/search?q= — 닉네임으로 사용자를 검색한다."""
     # Arrange — 검색 가능한 닉네임으로 사용자 생성
-    user1 = await create_verified_user(client, fake, nickname="searchme1")
+    await create_verified_user(client, fake, nickname="searchme1")
     searcher = await create_verified_user(client, fake)
 
     # Act — user1의 닉네임으로 검색

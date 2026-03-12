@@ -151,10 +151,10 @@ async def test_invalid_sort_falls_back_to_latest(client, fake):
     """유효하지 않은 정렬 옵션은 latest로 폴백한다."""
     user = await create_verified_user(client, fake)
 
-    post_old = await create_test_post(
+    await create_test_post(
         client, user["headers"], title="오래된 글"
     )
-    post_new = await create_test_post(
+    await create_test_post(
         client, user["headers"], title="최신 글"
     )
 
