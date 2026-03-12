@@ -38,19 +38,25 @@ async def health():
 
 async def _register_connection(conn_id: str, user_id: int):
     """Redis에 연결 등록"""
-    await _redis.hset(f"ws:conn:{conn_id}", mapping={
-        "user_id": str(user_id),
-    })
-    await _redis.expire(f"ws:conn:{conn_id}", 3600)
-    await _redis.sadd(f"ws:user:{user_id}", conn_id)
-    await _redis.expire(f"ws:user:{user_id}", 3600)
+    try:
+        await _redis.hset(f"ws:conn:{conn_id}", mapping={
+            "user_id": str(user_id),
+        })
+        await _redis.expire(f"ws:conn:{conn_id}", 3600)
+        await _redis.sadd(f"ws:user:{user_id}", conn_id)
+        await _redis.expire(f"ws:user:{user_id}", 3600)
+    except Exception:
+        logger.exception("Redis 연결 등록 실패")
 
 
 async def _unregister_connection(conn_id: str, user_id: int | None):
     """Redis에서 연결 제거"""
-    await _redis.delete(f"ws:conn:{conn_id}")
-    if user_id:
-        await _redis.srem(f"ws:user:{user_id}", conn_id)
+    try:
+        await _redis.delete(f"ws:conn:{conn_id}")
+        if user_id:
+            await _redis.srem(f"ws:user:{user_id}", conn_id)
+    except Exception:
+        logger.exception("Redis 연결 해제 실패")
 
 
 async def _listen_notifications(ws: WebSocket, user_id: int):
@@ -125,7 +131,7 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.close()
             return
 
-        user_id = payload.get("sub")
+        user_id = int(payload["sub"])
         await _register_connection(conn_id, user_id)
         await ws.send_json({"type": "auth_ok", "user_id": user_id})
 

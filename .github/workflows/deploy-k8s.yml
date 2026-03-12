@@ -48,8 +48,15 @@ jobs:
       image_tag: ${{ steps.meta.outputs.tag }}
 
     steps:
-      - name: Checkout
+      - name: Checkout backend
         uses: actions/checkout@v4
+
+      - name: Checkout frontend
+        if: inputs.component == 'fe' || inputs.component == 'all'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/2-cho-community-fe
+          path: frontend
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -81,7 +88,7 @@ jobs:
         run: |
           IMAGE="${{ steps.ecr-login.outputs.registry }}/my-community-${{ inputs.environment }}-frontend-k8s"
           TAG="${{ steps.meta.outputs.tag }}"
-          docker build --provenance=false -f ../2-cho-community-fe/Dockerfile.fe.k8s -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" ../2-cho-community-fe
+          docker build --provenance=false -f frontend/Dockerfile.fe.k8s -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" frontend
           docker push "${IMAGE}:${TAG}"
           docker push "${IMAGE}:latest"
 
@@ -103,10 +110,6 @@ jobs:
             REGISTRY="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-2.amazonaws.com"
             COMPONENT="${{ inputs.component }}"
             ENV="${{ inputs.environment }}"
-
-            # ECR 로그인
-            aws ecr get-login-password --region ap-northeast-2 | \
-              sudo crictl login --username AWS --password-stdin "${REGISTRY}" 2>/dev/null || true
 
             if [ "${COMPONENT}" = "api" ] || [ "${COMPONENT}" = "all" ]; then
               sudo kubectl set image deployment/community-api \
