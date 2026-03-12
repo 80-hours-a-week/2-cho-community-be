@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     WS_DYNAMODB_TABLE: str = ""
     WS_API_GW_ENDPOINT: str = ""
 
+    # WebSocket 백엔드 (K8s: "redis", Lambda: "dynamodb")
+    WS_BACKEND: str = "dynamodb"
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
