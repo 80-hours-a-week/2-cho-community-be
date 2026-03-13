@@ -2,12 +2,13 @@
 # K8s CD — Docker Build → ECR Push → kubectl rollout
 #
 # 수동 트리거: workflow_dispatch로 컴포넌트 선택 후 배포
-# 인증: GitHub Actions OIDC → AWS IAM Role (ECR push만)
+# 인증: GitHub Actions OIDC → AWS IAM Role (ECR push + SG 관리)
 # kubectl: Master 노드에서 직접 실행 (SSH)
+# SSH SG: runner IP를 동적 추가/삭제 (GitHub Actions IP가 매번 변경)
 #
 # 사전 설정:
 #   - Repository variable: AWS_ACCOUNT_ID
-#   - Environment secrets: K8S_MASTER_SSH_KEY, K8S_MASTER_HOST
+#   - Environment secrets: K8S_MASTER_SSH_KEY, K8S_MASTER_HOST, K8S_SSH_SG_ID
 ###############################################################################
 
 name: K8s CD — ECR + kubectl rollout
@@ -99,6 +100,27 @@ jobs:
     environment: ${{ inputs.environment }}
 
     steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/my-community-${{ inputs.environment }}-github-actions
+          aws-region: ap-northeast-2
+
+      - name: Allow SSH from runner IP
+        id: sg
+        env:
+          SG_ID: ${{ secrets.K8S_SSH_SG_ID }}
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "runner_ip=${RUNNER_IP}" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${SG_ID}" \
+            --protocol tcp --port 22 \
+            --cidr "${RUNNER_IP}/32" \
+            --tag-specifications "ResourceType=security-group-rule,Tags=[{Key=Purpose,Value=github-actions-deploy}]" || true
+          # SG 전파 대기
+          sleep 5
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -112,29 +134,40 @@ jobs:
             ENV="${{ inputs.environment }}"
 
             if [ "${COMPONENT}" = "api" ] || [ "${COMPONENT}" = "all" ]; then
-              sudo kubectl set image deployment/community-api \
-                api="${REGISTRY}/my-community-${ENV}-backend-k8s:${TAG}" -n app
-              sudo kubectl rollout status deployment/community-api -n app --timeout=120s
+              kubectl set image deployment/community-api \
+                community-api="${REGISTRY}/my-community-${ENV}-backend-k8s:${TAG}" -n app
+              kubectl rollout status deployment/community-api -n app --timeout=120s
             fi
 
             if [ "${COMPONENT}" = "ws" ] || [ "${COMPONENT}" = "all" ]; then
-              sudo kubectl set image deployment/community-ws \
-                ws="${REGISTRY}/my-community-${ENV}-backend-k8s:${TAG}" -n app
-              sudo kubectl rollout status deployment/community-ws -n app --timeout=120s
+              kubectl set image deployment/community-ws \
+                community-ws="${REGISTRY}/my-community-${ENV}-backend-k8s:${TAG}" -n app
+              kubectl rollout status deployment/community-ws -n app --timeout=120s
             fi
 
             if [ "${COMPONENT}" = "fe" ] || [ "${COMPONENT}" = "all" ]; then
-              sudo kubectl set image deployment/community-fe \
-                fe="${REGISTRY}/my-community-${ENV}-frontend-k8s:${TAG}" -n app
-              sudo kubectl rollout status deployment/community-fe -n app --timeout=120s
+              kubectl set image deployment/community-fe \
+                community-fe="${REGISTRY}/my-community-${ENV}-frontend-k8s:${TAG}" -n app
+              kubectl rollout status deployment/community-fe -n app --timeout=120s
             fi
 
       - name: Health check
         run: |
           sleep 10
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://api.k8s.my-community.shop/health" || true)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://api.my-community.shop/health" || true)
           if [ "${STATUS}" = "200" ]; then
             echo "Health check passed"
           else
             echo "Warning: Health check returned ${STATUS}"
           fi
+
+      - name: Revoke SSH from runner IP
+        if: always()
+        env:
+          SG_ID: ${{ secrets.K8S_SSH_SG_ID }}
+          RUNNER_IP: ${{ steps.sg.outputs.runner_ip }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${SG_ID}" \
+            --protocol tcp --port 22 \
+            --cidr "${RUNNER_IP}/32" || true
