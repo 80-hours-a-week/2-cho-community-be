@@ -105,6 +105,7 @@ def seed_via_api(host: str) -> None:
                         "email": email,
                         "password": ACCOUNT_PASSWORD,
                         "nickname": nickname,
+                        "terms_agreed": "true",
                     },
                     timeout=15,
                 )

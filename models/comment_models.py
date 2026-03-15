@@ -11,7 +11,7 @@ from datetime import datetime
 from database.connection import get_connection, transactional
 from schemas.common import build_author_dict
 
-ALLOWED_COMMENT_SORT_OPTIONS = {"oldest", "latest"}
+ALLOWED_COMMENT_SORT_OPTIONS = {"oldest", "latest", "popular"}
 
 
 @dataclass
@@ -354,6 +354,11 @@ async def get_comments_with_author(
             # 6. 루트 댓글 정렬 (대댓글은 항상 시간순 유지)
             if comment_sort == "latest":
                 root_comments.reverse()
+            elif comment_sort == "popular":
+                root_comments.sort(
+                    key=lambda c: (c["likes_count"], c["created_at"]),
+                    reverse=True,
+                )
 
             # 7. author_id 키 제거 (API 응답에 불필요)
             for c in root_comments:

@@ -48,12 +48,22 @@ class CreateUserRequest(BaseModel):
         password: 비밀번호 (8~20자, 대/소문자/숫자/특수문자 포함).
         nickname: 닉네임 (3~10자, 영문/숫자/언더바).
         profileImageUrl: 프로필 이미지 URL.
+        terms_agreed: 이용약관 동의 여부.
     """
 
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=20)
     nickname: str = Field(..., min_length=3, max_length=10)
     profileImageUrl: str | None = "/assets/profiles/default_profile.jpg"
+    terms_agreed: bool
+
+    @field_validator("terms_agreed")
+    @classmethod
+    def must_agree_terms(cls, v: bool) -> bool:
+        """이용약관 동의 여부를 검증합니다."""
+        if not v:
+            raise ValueError("서비스 이용을 위해 이용약관에 동의해야 합니다.")
+        return v
 
     @field_validator("password")
     @classmethod

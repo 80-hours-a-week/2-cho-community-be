@@ -98,6 +98,7 @@ def _make_user_payload(fake: Faker, **overrides) -> dict:
         "password": "Password123!",
         # 닉네임 길이 5~10자 보장
         "nickname": fake.lexify(text="?????") + str(fake.random_int(10, 99)),
+        "terms_agreed": "true",
     }
     payload.update(overrides)
     return payload
