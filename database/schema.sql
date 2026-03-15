@@ -9,6 +9,7 @@ CREATE TABLE user (
     role ENUM('user','admin') NOT NULL DEFAULT 'user',
     suspended_until TIMESTAMP NULL,
     suspended_reason VARCHAR(500) NULL,
+    terms_agreed_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL

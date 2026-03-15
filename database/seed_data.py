@@ -394,12 +394,12 @@ async def seed_users(cfg: dict):
         role = "admin" if i == 1 else "user"
         created_at = _random_past(365)
         # email_verified=1 — 글쓰기 가능하도록
-        users_data.append((email, 1, nickname, HASHED_PASSWORD, None, role, created_at))
+        users_data.append((email, 1, nickname, HASHED_PASSWORD, None, role, created_at, created_at))
 
     async with transactional() as cur:
         await cur.executemany(
-            """INSERT INTO user (email, email_verified, nickname, password, profile_img, role, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            """INSERT INTO user (email, email_verified, nickname, password, profile_img, role, created_at, terms_agreed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             users_data,
         )
     print(f"  ✓ 사용자 {n}명 (admin: user1, 비밀번호: Test1234!)")

@@ -37,6 +37,7 @@ async def create_user(
     email: str = Form(..., description="이메일 주소"),
     password: str = Form(..., description="비밀번호"),
     nickname: str = Form(..., description="닉네임"),
+    terms_agreed: bool = Form(..., description="이용약관 동의 여부"),
     profile_image: UploadFile | None = File(None, description="프로필 이미지"),
 ) -> dict:
     """새 사용자를 등록합니다.
@@ -46,22 +47,18 @@ async def create_user(
         email: 사용자 이메일.
         password: 비밀번호.
         nickname: 닉네임.
+        terms_agreed: 이용약관 동의 여부.
         profile_image: 프로필 이미지 파일.
 
     Returns:
         사용자 생성 성공 응답.
     """
-    # CreateUserRequest 모델 생성 (유효성 검사는 모델에서 수행되거나 컨트롤러에서 수행됨)
-    # 컨트롤러가 Form 데이터와 이미지를 모두 처리하도록 변경 예정이므로,
-    # 여기서는 개별 인자를 넘기거나 모델을 만들어 넘길 수 있음.
-    # 기존 컨트롤러 시그니처 변경에 맞춰서 구현.
-
-    # 임시적으로 모델 생성 (유효성 검증 활용)
     try:
         user_data = CreateUserRequest(
             email=email,
             password=password,
             nickname=nickname,
+            terms_agreed=terms_agreed,
             profileImageUrl=None,  # 이미지는 컨트롤러에서 처리 후 URL 할당
         )
     except ValidationError as e:

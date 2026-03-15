@@ -339,8 +339,8 @@ async def add_user(
     async with transactional() as cur:
         await cur.execute(
             """
-            INSERT INTO user (email, password, nickname, profile_img)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO user (email, password, nickname, profile_img, terms_agreed_at)
+            VALUES (%s, %s, %s, %s, NOW())
             """,
             (email, password, nickname, profile_image_url),
         )

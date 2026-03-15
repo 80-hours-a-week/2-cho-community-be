@@ -593,7 +593,7 @@ async def seed_users(pool: aiomysql.Pool) -> None:
         nickname = f"user_{i:05d}"
         role = "admin" if i == 1 else "user"
         created_at = growth_curve_timestamp(365)
-        data.append((email, HASHED_PASSWORD, nickname, role, 1, created_at))
+        data.append((email, HASHED_PASSWORD, nickname, role, 1, created_at, created_at))
 
         # 생성 진행률 표시 (1만 명마다)
         if i % 10_000 == 0:
@@ -602,7 +602,7 @@ async def seed_users(pool: aiomysql.Pool) -> None:
     print("  사용자 INSERT 시작...")
     inserted = await batch_insert_raw(
         pool, "user",
-        ["email", "password", "nickname", "role", "email_verified", "created_at"],
+        ["email", "password", "nickname", "role", "email_verified", "created_at", "terms_agreed_at"],
         data, ignore=True,
     )
     print(f"  사용자: {inserted:,}명 삽입 완료")
