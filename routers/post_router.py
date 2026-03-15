@@ -94,7 +94,7 @@ async def get_post(
     current_user: User | None = Depends(get_optional_user),
     comment_sort: str = Query(
         default="oldest",
-        description="댓글 정렬: oldest(오래된순), latest(최신순)",
+        description="댓글 정렬: oldest(오래된순), latest(최신순), popular(인기순)",
     ),
 ) -> dict:
     """특정 게시글의 상세 정보를 조회합니다.
@@ -106,7 +106,7 @@ async def get_post(
         post_id: 조회할 게시글 ID.
         request: FastAPI Request 객체.
         current_user: 현재 인증된 사용자 (선택적).
-        comment_sort: 댓글 정렬 옵션 (oldest, latest).
+        comment_sort: 댓글 정렬 옵션 (oldest, latest, popular).
 
     Returns:
         게시글 상세 정보와 댓글 목록이 포함된 응답.
