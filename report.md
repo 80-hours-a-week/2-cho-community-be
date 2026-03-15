@@ -50,7 +50,7 @@
 | 서비스 특성 | 인프라 요구사항 | 핵심 대응 |
 | ----------- | --------------- | --------- |
 | **읽기 중심 워크로드** (게시글 목록·상세 조회가 전체 요청의 ~80%) | DB 읽기 부하 분산, 캐싱 전략 | RDS Read Replica (미적용), CloudFront 캐싱 고려 |
-| **이미지 업로드** (게시글당 최대 5장, 프로필 이미지) | 파일 저장소 내구성, 처리량 확보 | EFS 마운트 (3-AZ 자동 복제), 백업 필요 |
+| **이미지 업로드** (게시글당 최대 5장, 프로필 이미지) | 파일 저장소 내구성, 처리량 확보 | S3 + CloudFront CDN, Pillow 자동 리사이징 (프로필 400×400, 게시글 1200px) |
 | **FULLTEXT 검색** (한국어 ngram 파서) | DB CPU 부하 증가, 인덱스 유지 비용 | MySQL FULLTEXT INDEX, 대량 데이터 시 별도 검색 엔진 고려 |
 | **실시간 알림** (WebSocket 푸시 + 폴링 폴백) | WebSocket 연결 관리, 상태 저장소 필요 | DynamoDB 연결 매핑 + API GW Management API, 폴링 자동 폴백 |
 | **인증 토큰 관리** (JWT 발급·갱신·폐기) | 토큰 저장소 정합성, 브루트포스 방어 | DB 행 잠금, Rate Limiting (분산 환경 한계 존재) |
@@ -58,6 +58,8 @@
 | **계정 정지** (관리자 기간 정지, 신고 연동) | 인증 체인 차단, 자동 만료 | 3중 체크 (로그인·토큰·API), `suspended_until` 비교 |
 | **마크다운 렌더링** (marked + DOMPurify + highlight.js) | XSS 방지, 번들 크기 관리 | DOMPurify sanitize → `<template>.innerHTML` 패턴, 코드 스플릿 ~46KB |
 | **DM 쪽지** (1:1 비공개 메시지, WebSocket 푸시) | 대화 정규화, soft delete, 차단 연동 | MIN/MAX 참가자 UNIQUE 제약, `last_message_at` 비정규화, MarkdownEditor 컴팩트 모드 |
+| **이용약관 동의** (회원가입 시 필수) | 동의 시각 기록, 법적 증빙 보관 | `user.terms_agreed_at` 컬럼, `CreateUserRequest` 검증, 탈퇴 시 보관 |
+| **@멘션 알림** (게시글/댓글 작성·수정) | 닉네임 파싱 정확도, 중복 알림 방지 | 정규식 `[a-zA-Z0-9_]{3,10}` 닉네임 규칙 동기화, 수정 시 차집합 알림 |
 
 ---
 
@@ -99,7 +101,7 @@ flowchart TD
         RDS["RDS MySQL 8.0<br/>Multi-AZ Prod · gp3"]
         EFS["EFS<br/>/mnt/uploads"]
         SSM["SSM<br/>SecureString"]
-        DDB["DynamoDB<br/>ws_connections · rate_limit"]
+        DDB["DynamoDB<br/>ws_connections"]
     end
 
     subgraph Ops["운영"]
@@ -164,7 +166,7 @@ flowchart TD
 | **CloudWatch** | 메트릭 알람, 대시보드, 로그 집계 | Lambda 에러, RDS CPU, 스토리지, 커넥션 수 실시간 모니터링 |
 | **CloudTrail** | AWS API 호출 감사 로그 | 멀티리전 추적으로 us-east-1(CloudFront/ACM) 이벤트 포함 |
 | **EventBridge** | 스케줄 기반 배치 작업 트리거 | API Destination + Connection으로 Lambda 내부 API 호출, 토큰 정리(1시간)·피드 재계산(30분) |
-| **DynamoDB** | WebSocket 연결 매핑 + 분산 Rate Limiter | ws_connections(실시간 알림), rate_limit(Fixed Window Counter, TTL 자동 만료) |
+| **DynamoDB** | WebSocket 연결 매핑 | ws_connections(실시간 알림). ~~rate_limit 테이블은 K8s 전환 후 Redis로 대체되어 제거됨~~ |
 
 #### API Gateway — Lambda 프록시 통합 (AWS_PROXY)
 
@@ -550,14 +552,14 @@ Lambda 인스턴스 수 × 풀 최대 크기 = 잠재적 DB 커넥션 수
 
 #### 3.2.3 Rate Limiter의 분산 환경 한계
 
-Rate Limiter는 로컬(인메모리)과 분산(DynamoDB) 두 가지 백엔드를 지원합니다. 프로덕션에서는 DynamoDB Fixed Window Counter를 사용하여 Lambda 인스턴스 간 상태를 공유하지만, DynamoDB 장애 시 fail-open 정책으로 요청을 허용합니다.
+Rate Limiter는 로컬(인메모리)과 분산(Redis) 두 가지 백엔드를 지원합니다. K8s 프로덕션에서는 Redis Fixed Window Counter를 사용하여 Pod 간 상태를 공유합니다. ~~이전 Lambda 환경에서는 DynamoDB를 사용했으나 K8s 전환 후 제거되었습니다.~~
 
-| 설계 | 인메모리 (로컬) | DynamoDB (프로덕션) | 잔여 한계 |
+| 설계 | 인메모리 (로컬) | Redis (K8s 프로덕션) | 잔여 한계 |
 | ------ | ------------- | ------------------- | --------- |
-| 로그인 제한 | 5 × N회/60초 (인스턴스별) | 5회/60초 (전역) | DynamoDB 장애 시 fail-open |
-| 게시글 작성 | 10 × N회/60초 (인스턴스별) | 10회/60초 (전역) | DynamoDB 장애 시 fail-open |
+| 로그인 제한 | 5 × N회/60초 (인스턴스별) | 5회/60초 (전역) | Redis 장애 시 fail-open |
+| 게시글 작성 | 10 × N회/60초 (인스턴스별) | 10회/60초 (전역) | Redis 장애 시 fail-open |
 
-**영향**: DynamoDB 백엔드 도입으로 정상 상황에서는 정확한 전역 제한이 가능하지만, DynamoDB 장애 시에는 가용성 우선(fail-open)으로 제한이 무효화됩니다. WAF 등 상위 계층 방어를 추가하면 이 잔여 위험을 완화할 수 있습니다.
+**영향**: Redis 백엔드로 정상 상황에서는 정확한 전역 제한이 가능하지만, Redis 장애 시에는 가용성 우선(fail-open)으로 제한이 무효화됩니다. WAF 등 상위 계층 방어를 추가하면 이 잔여 위험을 완화할 수 있습니다.
 
 #### 3.2.4 EFS 처리량 한계
 
@@ -1036,15 +1038,15 @@ flowchart TD
 | **환경별 차등 설계** | Dev(비용 최소) → Staging(중간) → Prod(HA 강화) 단계적 구성 |
 | **모니터링 기반** | CloudWatch 6개 알람 + 4개 위젯 대시보드 + CloudTrail 감사 |
 | **배포 안전성** | Blue/Green 배포로 Health check 통과 후에만 트래픽 전환, 실패 시 자동 유지 + 수동 롤백 워크플로우 |
-| **수평 확장 지원** | 분산 Rate Limiter(DynamoDB) + EventBridge 배치 작업으로 다중 인스턴스 환경 대응 |
+| **수평 확장 지원** | 분산 Rate Limiter(Redis) + K8s Pod 스케일링으로 다중 인스턴스 환경 대응 |
 | **비용 효율** | Free Tier 활용(t3.micro), 단일 NAT(Dev), Provisioned Concurrency 최소화 |
 
 ### 5.2 현재 아키텍처의 약점
 
 | 약점 | 영향 | 위험 시점 | 심각도 |
 | ------ | ------ | ---------- | -------- |
-| DB 커넥션 폭발 위험 | Lambda 스케일 아웃 시 RDS 커넥션 한도 초과 | Lambda 20+ 동시 인스턴스 | 높음 |
-| Rate Limiter fail-open | DynamoDB 장애 시 제한 무효화 (가용성 우선 정책) | DynamoDB 서비스 장애 시 | 중간 |
+| DB 커넥션 폭발 위험 | Lambda 스케일 아웃 시 RDS 커넥션 한도 초과 | Lambda 20+ 동시 인스턴스 (K8s 전환으로 완화) | 높음 |
+| Rate Limiter fail-open | Redis 장애 시 제한 무효화 (가용성 우선 정책) | Redis 서비스 장애 시 | 중간 |
 | EFS 백업 미설정 | 사용자 업로드 이미지 복구 불가 | **즉시** (데이터 손실 시 복구 수단 없음) | 높음 |
 | SNS 알림 미설정 | 장애 발생 시 대시보드 수동 확인 필요 | **즉시** (야간 장애 시 인지 지연) | 중간 |
 | 캐싱 부재 | 반복 조회(게시글 목록 등) 매번 DB 접근 | DAU 300+ (일일 30,000+ 요청) | 중간 |
@@ -1075,15 +1077,15 @@ flowchart TD
 | ElastiCache (Redis) | 게시글 목록/인기 게시글 캐싱 | DB 부하 80% 감소 (읽기) |
 | RDS Read Replica | 읽기 전용 복제본 추가 | 쓰기/읽기 분리, DB 성능 2배 |
 | CloudFront API 캐싱 | GET /v1/posts 엣지 캐싱 (TTL 30초) | API 응답 속도 개선, Lambda 호출 감소 |
-| ~~분산 Rate Limiter~~ | ~~DynamoDB 기반 분산 Rate Limiter~~ | ~~구현 완료~~ (Fixed Window Counter + TTL, fail-open 정책) |
+| ~~분산 Rate Limiter~~ | ~~DynamoDB → Redis 기반 분산 Rate Limiter~~ | ~~구현 완료~~ (K8s Redis Fixed Window Counter, fail-open 정책) |
 
 #### 장기 (Stage 3: DAU 30,000)
 
 | 항목 | 작업 | 효과 |
 | ------ | ------ | ------ |
-| ECS/EKS 마이그레이션 | Lambda → 컨테이너 오케스트레이션 | 커넥션 풀 안정화, 장시간 처리 가능 |
+| ~~ECS/EKS 마이그레이션~~ | ~~Lambda → 컨테이너 오케스트레이션~~ | ~~구현 완료~~ (kubeadm K8s 클러스터, Dev 배포 완료) |
 | Aurora Serverless v2 | RDS → Aurora | 자동 스케일링, 최대 128 ACU |
-| S3 이미지 마이그레이션 | EFS → S3 + CloudFront | 이미지 CDN 배포, 무제한 확장 |
+| ~~S3 이미지 마이그레이션~~ | ~~EFS → S3 + CloudFront~~ | ~~구현 완료~~ (S3 + CloudFront CDN + Pillow 자동 리사이징) |
 | 3-AZ 확장 | VPC 서브넷 3개 AZ로 확장 | 가용 영역 장애 내성 강화 |
 | ~~실시간 알림~~ | ~~WebSocket (API Gateway WebSocket API)~~ | ~~구현 완료~~ (별도 WebSocket API GW + Lambda + DynamoDB) |
 
