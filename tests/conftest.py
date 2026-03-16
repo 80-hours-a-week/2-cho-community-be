@@ -52,10 +52,12 @@ async def clear_all_data() -> None:
             # 카테고리 시드 데이터 삽입
             await cur.execute("""
                 INSERT INTO category (name, slug, description, sort_order) VALUES
-                    ('자유게시판', 'free', '자유롭게 이야기하는 공간입니다.', 1),
-                    ('질문답변', 'qna', '궁금한 것을 질문하고 답변합니다.', 2),
-                    ('정보공유', 'info', '유용한 정보를 공유합니다.', 3),
-                    ('공지사항', 'notice', '관리자 공지사항입니다.', 4)
+                    ('배포판', 'distro', 'Ubuntu, Fedora, Arch 등 배포판별 토론 공간입니다.', 1),
+                    ('Q&A', 'qna', '리눅스 트러블슈팅, 설치, 설정 관련 질문과 답변입니다.', 2),
+                    ('뉴스/소식', 'news', '리눅스 생태계의 최신 소식을 공유합니다.', 3),
+                    ('프로젝트/쇼케이스', 'showcase', 'dotfiles, 스크립트, 오픈소스 기여를 공유합니다.', 4),
+                    ('팁/가이드', 'guide', '리눅스 튜토리얼과 How-to 가이드입니다.', 5),
+                    ('공지사항', 'notice', '관리자 공지사항입니다.', 6)
             """)
 
 

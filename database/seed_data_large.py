@@ -534,34 +534,38 @@ async def clean_all_data(pool: aiomysql.Pool) -> None:
             # 카테고리 시드 재삽입
             await cur.execute("""
                 INSERT INTO category (name, slug, description, sort_order) VALUES
-                    ('자유게시판', 'free', '자유롭게 이야기하는 공간입니다.', 1),
-                    ('질문답변', 'qna', '궁금한 것을 질문하고 답변합니다.', 2),
-                    ('정보공유', 'info', '유용한 정보를 공유합니다.', 3),
-                    ('공지사항', 'notice', '관리자 공지사항입니다.', 4)
+                    ('배포판', 'distro', 'Ubuntu, Fedora, Arch 등 배포판별 토론 공간입니다.', 1),
+                    ('Q&A', 'qna', '리눅스 트러블슈팅, 설치, 설정 관련 질문과 답변입니다.', 2),
+                    ('뉴스/소식', 'news', '리눅스 생태계의 최신 소식을 공유합니다.', 3),
+                    ('프로젝트/쇼케이스', 'showcase', 'dotfiles, 스크립트, 오픈소스 기여를 공유합니다.', 4),
+                    ('팁/가이드', 'guide', '리눅스 튜토리얼과 How-to 가이드입니다.', 5),
+                    ('공지사항', 'notice', '관리자 공지사항입니다.', 6)
             """)
-            print("  카테고리 시드 재삽입 완료 (4개)")
+            print("  카테고리 시드 재삽입 완료 (6개)")
     print("  전체 TRUNCATE 완료")
 
 
 async def seed_categories(pool: aiomysql.Pool) -> None:
     """카테고리 시드 데이터 삽입.
 
-    이미 4개 이상 존재하면 스킵합니다.
+    이미 6개 이상 존재하면 스킵합니다.
     """
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT COUNT(*) FROM category")
             (count,) = await cur.fetchone()
 
-    if count >= 4:
+    if count >= 6:
         print(f"  카테고리: 이미 {count}개 존재 — 스킵")
         return
 
     data = [
-        ("자유게시판", "free", "자유롭게 이야기하는 공간입니다.", 1),
-        ("질문답변", "qna", "궁금한 것을 질문하고 답변합니다.", 2),
-        ("정보공유", "info", "유용한 정보를 공유합니다.", 3),
-        ("공지사항", "notice", "관리자 공지사항입니다.", 4),
+        ("배포판", "distro", "Ubuntu, Fedora, Arch 등 배포판별 토론 공간입니다.", 1),
+        ("Q&A", "qna", "리눅스 트러블슈팅, 설치, 설정 관련 질문과 답변입니다.", 2),
+        ("뉴스/소식", "news", "리눅스 생태계의 최신 소식을 공유합니다.", 3),
+        ("프로젝트/쇼케이스", "showcase", "dotfiles, 스크립트, 오픈소스 기여를 공유합니다.", 4),
+        ("팁/가이드", "guide", "리눅스 튜토리얼과 How-to 가이드입니다.", 5),
+        ("공지사항", "notice", "관리자 공지사항입니다.", 6),
     ]
     inserted = await batch_insert_raw(
         pool, "category",
@@ -625,17 +629,21 @@ async def seed_posts(pool: aiomysql.Pool) -> None:
         content = _generate_content()
         views = random.randint(0, 500)
 
-        # 카테고리: 공지사항(id=4)은 admin(user1)만
+        # 카테고리: 공지사항(id=6)은 admin(user1)만
         if author_id == 1:
-            category_id = random.randint(1, 4)
+            category_id = random.randint(1, 6)
         else:
             r = random.random()
-            if r < 0.4:
-                category_id = 1  # 자유게시판 40%
-            elif r < 0.7:
-                category_id = 2  # 질문답변 30%
+            if r < 0.25:
+                category_id = 1  # 배포판 25%
+            elif r < 0.45:
+                category_id = 2  # Q&A 20%
+            elif r < 0.60:
+                category_id = 3  # 뉴스/소식 15%
+            elif r < 0.80:
+                category_id = 4  # 프로젝트/쇼케이스 20%
             else:
-                category_id = 3  # 정보공유 30%
+                category_id = 5  # 팁/가이드 20%
 
         # 시간: 8%는 최근 7일 (피드 후보), 나머지는 성장 곡선
         if i < recent_count:
