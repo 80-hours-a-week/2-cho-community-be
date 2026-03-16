@@ -6,7 +6,7 @@ from typing import Protocol, Tuple
 class RateLimiterProtocol(Protocol):
     """Rate Limiter 백엔드 인터페이스.
 
-    인메모리(로컬)와 DynamoDB(프로덕션) 구현을 교체 가능하게 한다.
+    인메모리(로컬)와 Redis(K8s 프로덕션) 구현을 교체 가능하게 한다.
     """
 
     async def is_rate_limited(
