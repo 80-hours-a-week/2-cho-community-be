@@ -10,7 +10,7 @@ ALTER TABLE user ADD COLUMN nickname_set TINYINT(1) NOT NULL DEFAULT 1 AFTER nic
 CREATE TABLE IF NOT EXISTS social_account (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNSIGNED NOT NULL,
-    provider ENUM('kakao', 'naver') NOT NULL,
+    provider ENUM('github') NOT NULL,
     provider_id VARCHAR(255) NOT NULL,
     provider_email VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -3,12 +3,10 @@
 from fastapi import HTTPException, status
 
 from services.social_auth.base import SocialProvider
-from services.social_auth.kakao import KakaoProvider
-from services.social_auth.naver import NaverProvider
+from services.social_auth.github import GitHubProvider
 
 _PROVIDERS: dict[str, type[SocialProvider]] = {
-    "kakao": KakaoProvider,
-    "naver": NaverProvider,
+    "github": GitHubProvider,
 }
 
 SUPPORTED_PROVIDERS = set(_PROVIDERS.keys())

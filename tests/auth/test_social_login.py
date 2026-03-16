@@ -42,22 +42,22 @@ async def test_social_account_crud(client: AsyncClient):
     # 소셜 계정 생성
     sa_id = await social_account_models.create(
         user_id=user.id,
-        provider="kakao",
-        provider_id="kakao_12345",
+        provider="github",
+        provider_id="github_12345",
         provider_email=f"crud_{nickname}@test.com",
     )
     assert sa_id > 0
 
     # provider로 조회
-    sa = await social_account_models.get_by_provider("kakao", "kakao_12345")
+    sa = await social_account_models.get_by_provider("github", "github_12345")
     assert sa is not None
     assert sa["user_id"] == user.id
-    assert sa["provider"] == "kakao"
+    assert sa["provider"] == "github"
 
     # user_id로 조회
     accounts = await social_account_models.get_by_user_id(user.id)
     assert len(accounts) == 1
-    assert accounts[0]["provider"] == "kakao"
+    assert accounts[0]["provider"] == "github"
 
 
 @pytest.mark.asyncio
