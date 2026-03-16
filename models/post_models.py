@@ -454,7 +454,7 @@ async def get_posts_with_details(
                 SELECT
                     p.id, p.title, p.content, p.image_url, p.views,
                     p.created_at, p.updated_at,
-                    u.id, u.nickname, u.profile_img,
+                    u.id, u.nickname, u.profile_img, u.distro,
                     COALESCE(likes.count, 0) as likes_count,
                     COALESCE(comments.count, 0) as comments_count,
                     p.is_pinned, p.category_id, cat.name AS category_name,
@@ -502,13 +502,13 @@ async def get_posts_with_details(
                     "views_count": row[4],
                     "created_at": row[5],
                     "updated_at": row[6],
-                    "author": build_author_dict(row[7], row[8], row[9]),
-                    "likes_count": row[10],
-                    "comments_count": row[11],
-                    "is_pinned": bool(row[12]),
-                    "category_id": row[13],
-                    "category_name": row[14],
-                    "bookmarks_count": row[15],
+                    "author": build_author_dict(row[7], row[8], row[9], row[10]),
+                    "likes_count": row[11],
+                    "comments_count": row[12],
+                    "is_pinned": bool(row[13]),
+                    "category_id": row[14],
+                    "category_name": row[15],
+                    "bookmarks_count": row[16],
                 }
                 for row in rows
             ]
@@ -528,7 +528,7 @@ async def get_post_with_details(post_id: int) -> dict | None:
             await cur.execute(
                 """
                 SELECT p.id, p.title, p.content, p.image_url, p.views, p.created_at, p.updated_at,
-                       u.id, u.nickname, u.profile_img,
+                       u.id, u.nickname, u.profile_img, u.distro,
                        (SELECT COUNT(*) FROM post_like WHERE post_id = p.id) as likes_count,
                        p.is_pinned, p.category_id, cat.name AS category_name,
                        (SELECT COUNT(*) FROM post_bookmark WHERE post_id = p.id) as bookmarks_count
@@ -552,12 +552,12 @@ async def get_post_with_details(post_id: int) -> dict | None:
                 "views_count": row[4],
                 "created_at": row[5],
                 "updated_at": row[6],
-                "author": build_author_dict(row[7], row[8], row[9]),
-                "likes_count": row[10],
-                "is_pinned": bool(row[11]),
-                "category_id": row[12],
-                "category_name": row[13],
-                "bookmarks_count": row[14],
+                "author": build_author_dict(row[7], row[8], row[9], row[10]),
+                "likes_count": row[11],
+                "is_pinned": bool(row[12]),
+                "category_id": row[13],
+                "category_name": row[14],
+                "bookmarks_count": row[15],
             }
 
 
@@ -701,7 +701,7 @@ async def get_related_posts(
                 SELECT
                     p.id, p.title, p.content, p.image_url, p.views,
                     p.created_at, p.updated_at,
-                    u.id, u.nickname, u.profile_img,
+                    u.id, u.nickname, u.profile_img, u.distro,
                     COALESCE(likes.count, 0) AS likes_count,
                     COALESCE(comments.count, 0) AS comments_count,
                     p.is_pinned, p.category_id, cat.name AS category_name,
@@ -752,13 +752,13 @@ async def get_related_posts(
                     "views_count": row[4],
                     "created_at": row[5],
                     "updated_at": row[6],
-                    "author": build_author_dict(row[7], row[8], row[9]),
-                    "likes_count": row[10],
-                    "comments_count": row[11],
-                    "is_pinned": bool(row[12]),
-                    "category_id": row[13],
-                    "category_name": row[14],
-                    "bookmarks_count": row[15],
+                    "author": build_author_dict(row[7], row[8], row[9], row[10]),
+                    "likes_count": row[11],
+                    "comments_count": row[12],
+                    "is_pinned": bool(row[13]),
+                    "category_id": row[14],
+                    "category_name": row[15],
+                    "bookmarks_count": row[16],
                 }
                 for row in rows
             ]

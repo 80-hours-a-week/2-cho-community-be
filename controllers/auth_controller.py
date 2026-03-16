@@ -245,7 +245,7 @@ async def resend_verification(current_user: User, request: Request) -> dict:
     try:
         await send_email(
             to=current_user.email,
-            subject="[아무 말 대잔치] 이메일 인증",
+            subject="[Camp Linux] 이메일 인증",
             body=email_body,
         )
     except Exception:

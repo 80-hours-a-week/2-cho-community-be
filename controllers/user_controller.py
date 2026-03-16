@@ -25,6 +25,7 @@ def _serialize_public_user(user) -> dict:
         "user_id": user.id,
         "nickname": user.nickname,
         "profileImageUrl": user.profileImageUrl,
+        "distro": user.distro,
     }
 
 
@@ -171,6 +172,7 @@ async def update_user(
         user_id=current_user.id,
         nickname=update_data.nickname,
         profile_image_url=profile_image_url,
+        distro=update_data.distro,
         current_user=current_user,
         timestamp=timestamp,
     )

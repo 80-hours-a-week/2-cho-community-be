@@ -17,7 +17,7 @@ def generate_temp_nickname() -> str:
 
 
 # SQL Injection 방지: 허용된 컬럼명 whitelist
-ALLOWED_USER_COLUMNS = {'nickname', 'profile_img'}
+ALLOWED_USER_COLUMNS = {'nickname', 'profile_img', 'distro'}
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,7 @@ class User:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
+    distro: str | None = None
 
     @property
     def is_active(self) -> bool:
@@ -81,7 +82,7 @@ class User:
 # 공통으로 사용되는 SELECT 필드
 USER_SELECT_FIELDS = (
     "id, email, email_verified, nickname, nickname_set, password, profile_img, role, "
-    "suspended_until, suspended_reason, created_at, updated_at, deleted_at"
+    "suspended_until, suspended_reason, created_at, updated_at, deleted_at, distro"
 )
 
 
@@ -109,6 +110,7 @@ def _row_to_user(row: tuple) -> User:
         created_at=row[10],
         updated_at=row[11],
         deleted_at=row[12],
+        distro=row[13],
     )
 
 
@@ -372,6 +374,7 @@ async def update_user(
     user_id: int,
     nickname: str | None = None,
     profile_image_url: str | None = None,
+    distro: str | None = None,
 ) -> User | None:
     """사용자 정보를 업데이트합니다.
 
@@ -379,6 +382,7 @@ async def update_user(
         user_id: 업데이트할 사용자의 ID.
         nickname: 새 닉네임 (선택).
         profile_image_url: 새 프로필 이미지 URL (선택).
+        distro: 배포판 (선택).
 
     Returns:
         업데이트된 사용자 객체, 사용자가 없으면 None.
@@ -393,6 +397,9 @@ async def update_user(
     if profile_image_url is not None:
         updates.append("profile_img = %s")
         params.append(profile_image_url)
+    if distro is not None:
+        updates.append("distro = %s")
+        params.append(distro)
 
     if not updates:
         return await get_user_by_id(user_id)

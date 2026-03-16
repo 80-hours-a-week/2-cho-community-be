@@ -36,7 +36,7 @@ def create_response(
 DEFAULT_PROFILE_IMAGE = "/assets/profiles/default_profile.jpg"
 
 
-def build_author_dict(user_id, nickname, profile_img) -> dict[str, Any]:
+def build_author_dict(user_id, nickname, profile_img, distro=None) -> dict[str, Any]:
     """작성자 정보 딕셔너리를 생성합니다.
 
     탈퇴한 사용자인 경우 기본값으로 대체합니다.
@@ -45,6 +45,7 @@ def build_author_dict(user_id, nickname, profile_img) -> dict[str, Any]:
         user_id: 사용자 ID (탈퇴 시 None).
         nickname: 닉네임 (탈퇴 시 None).
         profile_img: 프로필 이미지 URL (없으면 기본 이미지).
+        distro: 배포판 (선택).
 
     Returns:
         작성자 정보 딕셔너리.
@@ -53,6 +54,7 @@ def build_author_dict(user_id, nickname, profile_img) -> dict[str, Any]:
         "user_id": user_id,
         "nickname": nickname if nickname else "탈퇴한 사용자",
         "profileImageUrl": profile_img or DEFAULT_PROFILE_IMAGE,
+        "distro": distro,
     }
 
 
@@ -72,6 +74,7 @@ def serialize_user(user) -> dict[str, Any]:
         "nickname": user.nickname,
         "profileImageUrl": user.profileImageUrl,
         "role": user.role,
+        "distro": user.distro,
     }
     if user.suspended_until and user.is_suspended:
         result["suspended_until"] = user.suspended_until.strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -83,7 +83,7 @@ class UserService:
 
             await send_email(
                 to=user_data.email,
-                subject="[아무 말 대잔치] 이메일 인증",
+                subject="[Camp Linux] 이메일 인증",
                 body=email_body,
             )
         except Exception:
@@ -97,12 +97,13 @@ class UserService:
         user_id: int,
         nickname: Optional[str],
         profile_image_url: Optional[str],
+        distro: Optional[str],
         current_user: User,
         timestamp: str,
     ) -> User:
         """사용자 정보 수정."""
         # 1. 변경 사항 없음 확인
-        if nickname is None and profile_image_url is None:
+        if nickname is None and profile_image_url is None and distro is None:
             raise bad_request_error(ErrorCode.NO_CHANGES_PROVIDED, timestamp)
 
         # 2. 닉네임 중복 확인
@@ -113,7 +114,8 @@ class UserService:
 
         # 3. 정보 수정
         updated_user = await user_models.update_user(
-            user_id, nickname=nickname, profile_image_url=profile_image_url
+            user_id, nickname=nickname, profile_image_url=profile_image_url,
+            distro=distro,
         )
 
         # update_user는 변경사항이 없으면 None을 반환할 수 있음 (실제 DB 업데이트 0건)
@@ -245,7 +247,7 @@ class UserService:
         # (비밀번호 변경 후 이메일 실패 시 사용자 계정 잠금 방지)
         await send_email(
             to=email,
-            subject="[아무 말 대잔치] 임시 비밀번호 안내",
+            subject="[Camp Linux] 임시 비밀번호 안내",
             body=email_body,
         )
 

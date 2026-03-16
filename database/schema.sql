@@ -11,6 +11,7 @@ CREATE TABLE user (
     suspended_until TIMESTAMP NULL,
     suspended_reason VARCHAR(500) NULL,
     terms_agreed_at TIMESTAMP NULL,
+    distro VARCHAR(20) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL
