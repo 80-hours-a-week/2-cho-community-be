@@ -164,8 +164,10 @@ class UserService:
         if not current_user.is_active:
             raise bad_request_error(ErrorCode.INACTIVE_USER, timestamp)
 
-        # 2. 비밀번호 확인
-        if not await asyncio.to_thread(verify_password, password, current_user.password):
+        # 2. 비밀번호 확인 (소셜 전용 계정은 비밀번호 없음)
+        if current_user.password is None or not await asyncio.to_thread(
+            verify_password, password, current_user.password
+        ):
             raise bad_request_error(ErrorCode.INVALID_PASSWORD, timestamp)
 
         # 3. 탈퇴 처리 (익명화 등은 모델의 withdraw_user 위임)

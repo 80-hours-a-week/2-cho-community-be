@@ -2,10 +2,11 @@
 
 from fastapi import HTTPException, status
 
+from services.social_auth.base import SocialProvider
 from services.social_auth.kakao import KakaoProvider
 from services.social_auth.naver import NaverProvider
 
-_PROVIDERS = {
+_PROVIDERS: dict[str, type[SocialProvider]] = {
     "kakao": KakaoProvider,
     "naver": NaverProvider,
 }
@@ -13,7 +14,7 @@ _PROVIDERS = {
 SUPPORTED_PROVIDERS = set(_PROVIDERS.keys())
 
 
-def get_provider(name: str) -> KakaoProvider | NaverProvider:
+def get_provider(name: str) -> SocialProvider:
     """프로바이더 이름으로 구현체를 생성합니다."""
     cls = _PROVIDERS.get(name)
     if not cls:

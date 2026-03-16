@@ -78,7 +78,7 @@ class AuthService:
         password_valid = await asyncio.to_thread(
             verify_password,
             password,
-            user.password if user else _TIMING_ATTACK_DUMMY_HASH,
+            (user.password or _TIMING_ATTACK_DUMMY_HASH) if user else _TIMING_ATTACK_DUMMY_HASH,
         )
 
         if not user or not password_valid:
