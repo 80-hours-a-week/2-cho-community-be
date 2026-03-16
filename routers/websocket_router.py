@@ -1,7 +1,7 @@
 """websocket_router: 로컬 개발 전용 WebSocket 엔드포인트.
 
-DEBUG=True일 때만 등록됩니다. 프로덕션에서는 별도 WebSocket Lambda가 담당합니다.
-인메모리 연결 관리로 DynamoDB 없이 WebSocket 기능을 테스트할 수 있습니다.
+DEBUG=True일 때만 등록됩니다. 프로덕션에서는 K8s WS Pod이 담당합니다.
+인메모리 연결 관리로 Redis 없이 WebSocket 기능을 테스트할 수 있습니다.
 """
 
 import asyncio

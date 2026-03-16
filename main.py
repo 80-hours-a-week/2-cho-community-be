@@ -29,7 +29,6 @@ from database.connection import init_db, close_db
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-from mangum import Mangum
 
 
 logger = logging.getLogger("api")
@@ -42,7 +41,7 @@ async def lifespan(app: FastAPI):
     시작 시 데이터베이스 연결 풀을 초기화하고,
     종료 시 연결 풀을 정리합니다.
 
-    배치 작업(토큰 정리, 피드 점수 재계산)은 EventBridge 스케줄로 실행됩니다.
+    배치 작업(토큰 정리, 피드 점수 재계산)은 K8s CronJob으로 실행됩니다.
     """
     await init_db()
     yield
@@ -90,7 +89,7 @@ app.include_router(dm_router)
 app.include_router(social_auth_router.router)
 app.include_router(draft_router.router)
 
-# 로컬 개발 전용 WebSocket 엔드포인트 (프로덕션에서는 별도 Lambda가 담당)
+# 로컬 개발 전용 WebSocket 엔드포인트 (K8s WS Pod이 담당)
 if settings.DEBUG:
     from routers.websocket_router import router as ws_router
 
@@ -102,18 +101,13 @@ if settings.TESTING:
 
     app.include_router(test_router)
 
-# Lambda 환경에서는 /var/task가 읽기 전용
-# Docker 이미지에 assets/profiles/default_profile.jpg가 포함됨
-if os.environ.get("AWS_LAMBDA_EXEC") != "true":
-    os.makedirs("assets", exist_ok=True)
-if os.path.isdir("assets"):
-    app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+os.makedirs("assets", exist_ok=True)
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
-# 업로드 파일 서빙 (Lambda: EFS /mnt/uploads, Docker: UPLOAD_DIR 환경변수)
+# 업로드 파일 서빙 (UPLOAD_DIR 환경변수)
 _upload_dir = os.environ.get("UPLOAD_DIR")
 if _upload_dir:
-    if os.environ.get("AWS_LAMBDA_EXEC") != "true":
-        os.makedirs(_upload_dir, exist_ok=True)
+    os.makedirs(_upload_dir, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 
@@ -131,13 +125,8 @@ app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore[arg-type]
 
 # K8s: Prometheus 메트릭 엔드포인트
-if os.environ.get("AWS_LAMBDA_EXEC") != "true":
-    try:
-        from prometheus_fastapi_instrumentator import Instrumentator
-        Instrumentator().instrument(app).expose(app)
-    except ImportError:
-        pass  # K8s 의존성 미설치 시 무시 (로컬 개발)
-
-# AWS Lambda 핸들러 (K8s에서는 불필요)
-if os.environ.get("AWS_LAMBDA_EXEC") == "true":
-    handler = Mangum(app)
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator().instrument(app).expose(app)
+except ImportError:
+    pass  # K8s 의존성 미설치 시 무시 (로컬 개발)

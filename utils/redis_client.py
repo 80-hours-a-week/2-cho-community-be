@@ -1,4 +1,4 @@
-"""Redis 연결 관리 — K8s 환경에서 DynamoDB 대체"""
+"""Redis 연결 관리 — K8s 환경의 Rate Limiter + WebSocket Pub/Sub"""
 import asyncio
 
 import redis.asyncio as aioredis
