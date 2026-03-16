@@ -273,7 +273,7 @@ async def get_comments_with_author(
             await cur.execute(
                 """
                 SELECT c.id, c.content, c.created_at, c.updated_at,
-                       u.id, u.nickname, u.profile_img,
+                       u.id, u.nickname, u.profile_img, u.distro,
                        c.parent_id, c.deleted_at,
                        COALESCE(cl.count, 0) as likes_count,
                        c.author_id
@@ -295,17 +295,17 @@ async def get_comments_with_author(
             all_comments: dict[int, dict] = {}
             for row in rows:
                 comment_id = row[0]
-                is_deleted = row[8] is not None
-                author_id = row[10]
+                is_deleted = row[9] is not None
+                author_id = row[11]
                 all_comments[comment_id] = {
                     "comment_id": comment_id,
                     "content": None if is_deleted else row[1],
                     "created_at": row[2],
                     "updated_at": row[3],
-                    "author": None if is_deleted else build_author_dict(row[4], row[5], row[6]),
-                    "parent_id": row[7],
+                    "author": None if is_deleted else build_author_dict(row[4], row[5], row[6], row[7]),
+                    "parent_id": row[8],
                     "is_deleted": is_deleted,
-                    "likes_count": row[9],
+                    "likes_count": row[10],
                     "is_liked": comment_id in liked_comment_ids,
                     "author_id": author_id,
                     "replies": [],

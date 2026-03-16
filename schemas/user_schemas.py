@@ -9,6 +9,11 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from schemas._image_validators import validate_profile_image_url
 
+VALID_DISTROS = frozenset({
+    'ubuntu', 'fedora', 'arch', 'debian', 'mint',
+    'opensuse', 'rocky', 'nixos', 'gentoo', 'other',
+})
+
 _PASSWORD_PATTERN = re.compile(
     r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$"
 )
@@ -94,10 +99,26 @@ class UpdateUserRequest(BaseModel):
     Attributes:
         nickname: 새 닉네임 (선택).
         profileImageUrl: 새 프로필 이미지 URL (선택) - 문자열 또는 {"url": "..."} 객체.
+        distro: 배포판 (선택).
     """
 
     nickname: str | None = Field(None, min_length=3, max_length=10)
     profileImageUrl: str | dict | None = None
+    distro: str | None = None
+
+    @field_validator("distro")
+    @classmethod
+    def validate_distro(cls, v: str | None) -> str | None:
+        """배포판 값을 검증합니다."""
+        if v is None:
+            return None
+        if v == '':
+            return ''  # 배포판 해제 요청
+        if v not in VALID_DISTROS:
+            raise ValueError(
+                f"유효하지 않은 배포판입니다. 허용: {', '.join(sorted(VALID_DISTROS))}"
+            )
+        return v
 
     @field_validator("nickname")
     @classmethod

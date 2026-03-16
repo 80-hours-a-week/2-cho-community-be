@@ -49,8 +49,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="2cho Community API",
-    description="커뮤니티 백엔드 API 서버",
+    title="Camp Linux API",
+    description="Camp Linux 커뮤니티 백엔드 API 서버",
     version="1.0.0",
     lifespan=lifespan,
 )
