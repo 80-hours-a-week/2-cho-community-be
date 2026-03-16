@@ -578,6 +578,22 @@ async def cleanup_deleted_user(user_id: int) -> User | None:
         return await _disconnect_and_anonymize_user(cur, user_id, set_deleted_at=False)
 
 
+async def update_nickname_set(user_id: int, nickname: str) -> User | None:
+    """닉네임을 설정하고 nickname_set=1로 변경합니다."""
+    async with transactional() as cur:
+        await cur.execute(
+            "UPDATE user SET nickname = %s, nickname_set = 1 WHERE id = %s AND deleted_at IS NULL",
+            (nickname, user_id),
+        )
+        if cur.rowcount == 0:
+            return None
+        await cur.execute(
+            f"SELECT {USER_SELECT_FIELDS} FROM user WHERE id = %s", (user_id,)
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
+
+
 async def add_social_user(
     email: str | None,
     nickname: str,
