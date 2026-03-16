@@ -35,7 +35,7 @@
 | 계층 | 기술 | 선택 근거 | 운영 고려사항 |
 | ------ | ------ | ----------- | ------------- |
 | **프론트엔드** | Vanilla JavaScript (MPA, Vite 빌드) | 프레임워크 없이 JS 기본기 학습 | S3 + CloudFront로 정적 배포, 서버 부하 0 |
-| **백엔드** | FastAPI (Python 3.13) | 비동기 I/O, 자동 API 문서화 | Lambda 컨테이너 실행, 콜드 스타트 영향 |
+| **백엔드** | FastAPI (Python 3.11+) | 비동기 I/O, 자동 API 문서화 | Lambda 컨테이너 실행, 콜드 스타트 영향 |
 | **데이터베이스** | MySQL 8.0 (aiomysql) | FULLTEXT 검색(ngram), 트랜잭션 격리 | 커넥션 풀 관리, Lambda 스케일링 시 폭발 위험 |
 | **인증** | JWT (Access 30분 + Refresh 7일) | Stateless 인증, XSS 방어 | 토큰 저장소 DB 의존, 만료 토큰 주기적 정리 |
 | **인프라** | AWS (Terraform 19개 모듈) | 서버리스 아키텍처, IaC 재현성 | 3개 환경(Dev/Staging/Prod) 차등 설계 |
@@ -60,6 +60,9 @@
 | **DM 쪽지** (1:1 비공개 메시지, WebSocket 푸시) | 대화 정규화, soft delete, 차단 연동 | MIN/MAX 참가자 UNIQUE 제약, `last_message_at` 비정규화, MarkdownEditor 컴팩트 모드 |
 | **이용약관 동의** (회원가입 시 필수) | 동의 시각 기록, 법적 증빙 보관 | `user.terms_agreed_at` 컬럼, `CreateUserRequest` 검증, 탈퇴 시 보관 |
 | **@멘션 알림** (게시글/댓글 작성·수정) | 닉네임 파싱 정확도, 중복 알림 방지 | 정규식 `[a-zA-Z0-9_]{3,10}` 닉네임 규칙 동기화, 수정 시 차집합 알림 |
+| **소셜 로그인** (GitHub OAuth) | OAuth 프로바이더 연동, 계정 연결 | `social_account` 테이블, 프로바이더 팩토리 패턴, `nickname_set` 분기 |
+| **알림 설정** (유형별 on/off) | 사용자별 설정 저장, 알림 생성 시 체크 | `notification_setting` UPSERT, `is_notification_muted()` 게이트 |
+| **임시저장** (서버 측 드래프트) | 사용자당 1개 제한, 기기 간 동기화 | `post_draft` UPSERT, localStorage 폴백 |
 
 ---
 
@@ -92,7 +95,7 @@ flowchart TD
 
     subgraph Compute["컴퓨팅 (Private Subnet)"]
         direction LR
-        Lambda["Lambda Container<br/>FastAPI + Mangum<br/>Python 3.13 · 1024 MB"]
+        Lambda["Lambda Container<br/>FastAPI + Mangum<br/>Python 3.11+ · 1024 MB"]
         Lambda_WS["WebSocket Lambda<br/>Python 3.11 · 256 MB"]
     end
 
