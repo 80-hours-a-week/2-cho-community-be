@@ -456,7 +456,7 @@ CREATE TABLE wiki_page (
 -- 위키 페이지 ↔ 태그 연결 테이블
 CREATE TABLE wiki_page_tag (
     wiki_page_id INT UNSIGNED NOT NULL,
-    tag_id INT UNSIGNED NOT NULL,
+    tag_id BIGINT UNSIGNED NOT NULL,
     PRIMARY KEY (wiki_page_id, tag_id),
     FOREIGN KEY (wiki_page_id) REFERENCES wiki_page(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
