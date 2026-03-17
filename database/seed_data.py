@@ -5,13 +5,16 @@
     python database/seed_data.py [--scale small|medium|large]
 
 생성되는 데이터 (small 기준):
-    - 50 users (이메일 인증 완료, admin 1명 포함)
-    - 200 posts (마크다운 콘텐츠, 카테고리, 태그 포함)
-    - 800 comments (대댓글 20% 포함)
+    - 50 users (이메일 인증 완료, admin 1명, distro 분포 포함)
+    - 15 packages + 100 reviews (평점 1~5 균등)
+    - 200 posts (리눅스 마크다운 콘텐츠, 카테고리, 태그)
+    - 800 comments (대댓글 20%)
     - 500 post_likes, 200 bookmarks, 300 comment_likes
     - 100 follows, 10 blocks
     - 30 tags, 20 polls, 100 notifications
     - 15 reports, 300 view_logs
+    - 15 wiki pages (FAQ, 태그 연결)
+    - 10 notification_settings (커스텀)
     - 10 DM conversations with ~50 messages
 """
 
@@ -53,6 +56,9 @@ SCALE_PRESETS = {
         "view_logs": 300,
         "dm_conversations": 10,
         "dm_messages_per_conv": 5,
+        "wiki_pages": 15,
+        "package_reviews": 100,
+        "notification_settings": 10,
     },
     "medium": {
         "users": 500,
@@ -63,13 +69,16 @@ SCALE_PRESETS = {
         "comment_likes": 3000,
         "follows": 1000,
         "blocks": 50,
-        "tags": 80,
+        "tags": 30,
         "polls": 100,
         "notifications": 1000,
         "reports": 100,
         "view_logs": 5000,
         "dm_conversations": 50,
         "dm_messages_per_conv": 10,
+        "wiki_pages": 15,
+        "package_reviews": 500,
+        "notification_settings": 100,
     },
     "large": {
         "users": 10000,
@@ -80,223 +89,833 @@ SCALE_PRESETS = {
         "comment_likes": 50000,
         "follows": 20000,
         "blocks": 500,
-        "tags": 200,
+        "tags": 30,
         "polls": 500,
         "notifications": 10000,
         "reports": 500,
         "view_logs": 100000,
         "dm_conversations": 500,
         "dm_messages_per_conv": 15,
+        "wiki_pages": 15,
+        "package_reviews": 5000,
+        "notification_settings": 2000,
     },
 }
 
 # 미리 해시된 비밀번호 (Test1234!)
 HASHED_PASSWORD = hash_password("Test1234!")
 
-# 마크다운 콘텐츠 템플릿
+# 배포판 분포 (Camp Linux 테마)
+DISTROS = ["ubuntu", "fedora", "arch", "debian", "mint", "opensuse", "manjaro", "other", None]
+DISTRO_WEIGHTS = [0.30, 0.15, 0.15, 0.12, 0.08, 0.05, 0.05, 0.05, 0.05]
+
+# ─────────────────────────────────────────────
+# 리눅스 테마 콘텐츠
+# ─────────────────────────────────────────────
+
 MARKDOWN_CONTENTS = [
-    """## 개발 환경 세팅 가이드
+    """## Ubuntu 24.04 LTS 업그레이드 후기
 
-최근 새 프로젝트를 시작하면서 정리한 개발 환경 세팅 방법입니다.
+드디어 Noble Numbat으로 업그레이드했습니다.
 
-### 필수 도구
-- **VS Code** — 가장 널리 쓰이는 에디터
-- **Git** — 버전 관리 필수
-- **Docker** — 컨테이너 기반 개발
+### 달라진 점
+- **GNOME 46** — 파일 관리자 속도 체감
+- **Linux Kernel 6.8** — 하드웨어 호환성 개선
+- **APT 변경사항** — `apt`가 더 빨라진 느낌
 
-### 추천 확장 프로그램
-1. Prettier
-2. ESLint
-3. GitLens
+### 업그레이드 과정
+```bash
+sudo apt update && sudo apt full-upgrade
+sudo do-release-upgrade
+```
 
-> 처음 세팅할 때 시간이 좀 걸리지만, 한 번 해두면 편합니다!
+> 클린 설치보다 업그레이드가 편하긴 한데, 기존 PPA 충돌만 조심하세요!""",
+    """Arch Linux를 메인으로 쓴 지 1년이 됐습니다.
+
+**Rolling Release**의 장단점을 체감하고 있습니다.
+
+| 항목 | 장점 | 단점 |
+|------|------|------|
+| 패키지 | 항상 최신 | 가끔 깨짐 |
+| 커스텀 | 완전한 자유 | 직접 해야 함 |
+| 문서 | Arch Wiki 최강 | 러닝 커브 높음 |
+
+특히 `pacman -Syu` 한 방이면 전체 시스템이 최신 상태가 되는 게 매력입니다.""",
+    """### i3wm 타일링 윈도우 매니저 설정 공유
+
+데스크톱 환경 없이 i3wm만 쓰고 있습니다.
+
+1. **i3-gaps** — 창 사이 간격 설정
+2. **polybar** — 상태 바 커스텀
+3. **rofi** — 앱 런처
+4. **picom** — 컴포지터 (투명도, 그림자)
 
 ```bash
-# Docker Compose 실행
-docker-compose up -d
-```""",
-    """오늘 알고리즘 문제를 풀다가 재미있는 패턴을 발견했습니다.
+# i3 설정 파일 위치
+~/.config/i3/config
 
-**투 포인터** 기법을 활용하면 O(n²)을 O(n)으로 줄일 수 있더라고요.
-
-| 방법 | 시간복잡도 | 공간복잡도 |
-|------|-----------|-----------|
-| 브루트포스 | O(n²) | O(1) |
-| 해시맵 | O(n) | O(n) |
-| 투 포인터 | O(n) | O(1) |
-
-특히 정렬된 배열에서 두 수의 합을 찾을 때 유용합니다.""",
-    """### 코드 리뷰에서 배운 것들
-
-이번 주 코드 리뷰를 받으면서 몇 가지 중요한 피드백을 받았습니다:
-
-1. **변수명은 의도를 드러내야 한다** — `data`보다 `userProfiles`가 낫다
-2. **함수는 한 가지 일만** — 100줄짜리 함수를 3개로 분리
-3. **에러 처리를 빠뜨리지 말 것** — happy path만 생각하면 안 됨
-
-```python
-# Before
-def process(data):
-    # 100줄의 코드...
-
-# After
-def validate_input(data):
-    ...
-
-def transform_data(validated):
-    ...
-
-def save_result(transformed):
-    ...
+# 자주 쓰는 키바인딩
+bindsym $mod+Return exec alacritty
+bindsym $mod+d exec rofi -show drun
+bindsym $mod+Shift+q kill
 ```
 
-다음 리뷰에서는 더 나아진 코드를 보여주고 싶네요! 💪""",
-    """면접 준비하면서 정리한 **REST API 설계 원칙**입니다.
+미니멀한 작업 환경을 원하시면 추천합니다!""",
+    """## systemd 서비스 직접 만들기
 
-### 핵심 원칙
-- URI는 **명사**를 사용 (동사 X)
-- HTTP 메서드로 행위를 표현
-- 적절한 **상태 코드** 반환
+커스텀 데몬을 systemd로 관리하는 방법입니다.
 
-### 자주 하는 실수
-~~`GET /getUsers`~~ → `GET /users`
-~~`POST /deleteUser/1`~~ → `DELETE /users/1`
+### 서비스 파일 생성
+```ini
+# /etc/systemd/system/myapp.service
+[Unit]
+Description=My Application
+After=network.target
 
-이 정도만 기억해도 면접에서 기본은 한다고 봅니다.""",
-    """## 스터디 모집합니다! 📚
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/myapp
+ExecStart=/opt/myapp/run.sh
+Restart=on-failure
+RestartSec=5
 
-**주제**: 시스템 디자인 면접 준비
-**기간**: 4주 (매주 토요일)
-**인원**: 4~6명
+[Install]
+WantedBy=multi-user.target
+```
 
-### 커리큘럼
-- 1주차: URL 단축기 설계
-- 2주차: 뉴스 피드 시스템
-- 3주차: 채팅 시스템
-- 4주차: 검색 자동완성
+### 주요 명령어
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable myapp
+sudo systemctl start myapp
+journalctl -u myapp -f  # 로그 실시간 확인
+```
 
-관심 있으신 분은 댓글 남겨주세요!""",
-    """오늘 겪은 버그 해결 과정을 공유합니다.
+> `Restart=on-failure`와 `RestartSec`을 꼭 설정하세요. 크래시 루프 방지에 필수입니다.""",
+    """NVIDIA 드라이버 삽질기를 공유합니다.
 
 ### 증상
-API 응답이 간헐적으로 **5초 이상** 걸림.
+Ubuntu에서 `nvidia-smi` 실행 시 `No devices were found` 에러.
 
 ### 원인 분석
-1. 로그 확인 → DB 쿼리 자체는 빠름
-2. `EXPLAIN` 실행 → 풀 테이블 스캔 발견!
-3. 인덱스 확인 → `WHERE` 조건 컬럼에 인덱스 없음
+1. `lspci | grep -i nvidia` → GPU 인식은 됨
+2. `dmesg | grep -i nvidia` → 모듈 로드 실패
+3. Secure Boot가 서명되지 않은 커널 모듈 차단!
 
 ### 해결
-```sql
-CREATE INDEX idx_post_author ON post (author_id, created_at);
+```bash
+# 방법 1: Secure Boot 비활성화 (BIOS)
+# 방법 2: MOK 등록 (권장)
+sudo mokutil --import /var/lib/dkms/mok.pub
+# 재부팅 후 MOK Manager에서 Enroll 선택
 ```
 
-인덱스 하나로 5초 → 50ms로 개선되었습니다.
+인덱스 하나로 5초 → 50ms 개선이 아니라, Secure Boot 하나로 3일 삽질이었습니다.""",
+    """프론트엔드 개발할 때 WSL2 + Docker 조합이 편합니다.
 
-> 항상 `EXPLAIN`을 습관처럼 확인하세요!""",
-    """프론트엔드 성능 최적화 팁 모음입니다.
+- **WSL2 Ubuntu** 안에서 개발 서버 실행
+- **Docker Desktop** WSL2 백엔드 모드 사용
+- VS Code **Remote - WSL** 확장으로 리눅스 파일시스템 직접 편집
+- `localhost` 포워딩 자동 지원
 
-- **이미지 lazy loading** 적용하기
-- 번들 사이즈 **코드 스플리팅**으로 줄이기
-- `requestAnimationFrame` 활용한 부드러운 애니메이션
-- CSS `will-change` 속성으로 GPU 가속
+```bash
+# WSL에서 Docker 상태 확인
+docker info | grep "Operating System"
+# Output: Docker Desktop (WSL2 backend)
+```
 
-특히 이미지가 많은 페이지에서 lazy loading만 적용해도 체감 속도가 확 달라집니다.""",
-    """취업 준비 6개월 회고록입니다.
+Windows 파일시스템(`/mnt/c/`)에서 작업하면 느리니 반드시 `~/` 아래에서 작업하세요.""",
+    """## 내 dotfiles 관리 방법
 
-처음에는 막막했지만 하나씩 준비하다 보니 결국 해냈습니다.
+bare Git repo로 dotfiles를 관리하고 있습니다.
 
-### 타임라인
-1. 1~2개월: CS 기초 공부 (운영체제, 네트워크, DB)
-2. 3~4개월: 알고리즘 매일 1문제씩
-3. 5개월: 포트폴리오 프로젝트
-4. 6개월: 면접 준비 + 지원
+### 초기 설정
+```bash
+git init --bare $HOME/.dotfiles
+alias dotgit='git --git-dir=$HOME/.dotfiles --work-tree=$HOME'
+dotgit config --local status.showUntrackedFiles no
+```
 
-### 가장 도움이 된 것
-- 매일 **커밋 습관** 기르기
-- 기술 블로그 **주 1회** 작성
-- 스터디 그룹에서 **모의 면접**
+### 사용법
+```bash
+dotgit add ~/.bashrc ~/.config/i3/config
+dotgit commit -m "i3 키바인딩 업데이트"
+dotgit push origin main
+```
 
-포기하지 않으면 반드시 길이 열립니다.""",
+### 새 머신에서 복원
+```bash
+git clone --bare <repo-url> $HOME/.dotfiles
+dotgit checkout
+```
+
+Stow나 chezmoi보다 간단하고, 별도 도구 설치가 필요 없어서 좋습니다.""",
+    """취업 준비하면서 정리한 **리눅스 면접 필수 개념**입니다.
+
+### 프로세스 관리
+- `fork()` vs `exec()` vs `clone()`
+- 좀비 프로세스와 고아 프로세스
+- 시그널 핸들링 (SIGTERM vs SIGKILL)
+
+### 파일 시스템
+- inode 구조, 하드링크 vs 심볼릭링크
+- `/proc`, `/sys` 가상 파일시스템
+- 파일 퍼미션 비트 (setuid, sticky bit)
+
+### 네트워크
+- iptables/nftables 규칙 구조
+- TCP 3-way handshake, TIME_WAIT
+- `ss` vs `netstat` (ss가 더 빠름)
+
+### 기출 질문
+~~"리눅스에서 부팅 과정을 설명하세요"~~ → BIOS/UEFI → GRUB → Kernel → init/systemd
+
+이 정도만 기억해도 시스템 엔지니어 면접 기본은 합니다.""",
 ]
 
-# 일반 콘텐츠 (비마크다운)
 PLAIN_CONTENTS = [
-    "오늘 개발하다가 재미있는 것을 발견했습니다. 여러분도 한번 시도해보세요.",
-    "이 방법이 정말 효율적인지 궁금합니다. 경험 있으신 분 의견 부탁드립니다.",
-    "프로젝트를 마무리하고 나서 느낀 점을 공유합니다. 처음부터 설계를 잘 해야 나중에 편하더라고요.",
-    "최근에 배운 기술을 실무에 적용해봤는데 생각보다 잘 동작해서 놀랐습니다.",
-    "개발자로 일하면서 가장 힘든 점은 의사소통인 것 같아요. 기술보다 사람이 더 어렵습니다.",
-    "새로운 라이브러리를 써봤는데 문서가 잘 되어 있어서 금방 적용할 수 있었습니다.",
-    "이번 주말에 사이드 프로젝트를 시작했습니다. 아직 초기 단계지만 완성이 기대됩니다.",
-    "코딩 테스트 후기입니다. 알고리즘 공부를 꾸준히 해야겠다고 다시 한번 느꼈습니다.",
+    "오늘 커널 업데이트 후 부팅이 안 돼서 GRUB에서 이전 커널로 복구했습니다. 여러분도 커널 업데이트 전에 스냅샷 꼭 남기세요.",
+    "Fedora 40에서 Wayland가 기본이 됐는데, X11 전용 앱들이 XWayland로 잘 돌아가더라고요. 체감 차이는 거의 없었습니다.",
+    "리눅스 민트에서 우분투로 갈아탔는데, Cinnamon이 그립습니다. GNOME은 확장 없이는 좀 불편하네요.",
+    "ZFS on Linux 써보신 분? 스냅샷이랑 압축이 좋다는데 메모리를 많이 먹는다고 해서 고민됩니다.",
+    "오늘 처음으로 Arch 설치에 성공했습니다! archinstall 안 쓰고 수동으로 했는데 뿌듯하네요.",
+    "서버 관리할 때 Ansible이랑 셸 스크립트 중에 뭐가 나을까요? 서버 5대 정도 규모입니다.",
+    "tmux 설정 공유합니다. prefix를 Ctrl+a로 바꾸고 마우스 모드 켜면 훨씬 편합니다.",
+    "Flatpak vs Snap 논쟁이 다시 시작됐네요. 개인적으로 Flatpak이 더 가볍게 느껴집니다.",
 ]
 
 TITLES = [
-    "개발 공부 팁 공유",
-    "코딩 질문입니다",
-    "프로젝트 후기",
-    "취업 준비 이야기",
-    "알고리즘 문제 풀이",
-    "개발 블로그 추천",
-    "오류 해결 방법",
-    "기술 면접 준비",
-    "개발자 일상",
-    "코딩 테스트 후기",
-    "스터디 모집합니다",
-    "커리어 고민",
-    "오픈소스 기여 경험",
-    "개발 도구 추천",
-    "신기술 소개",
-    "코드 리뷰 요청",
-    "DB 최적화 경험담",
-    "프론트엔드 성능 개선",
-    "백엔드 아키텍처 고민",
-    "CI/CD 파이프라인 구축",
+    "Ubuntu 24.04 업그레이드 후기",
+    "Arch Linux 설치 삽질기",
+    "Fedora에서 Wayland 사용 경험",
+    "NVIDIA 드라이버 설치 가이드",
+    "i3wm 설정 공유합니다",
+    "systemd 서비스 만들기",
+    "내 dotfiles 공유",
+    "리눅스 면접 준비 정리",
+    "커널 패닉 복구 방법",
+    "ZFS vs Btrfs 비교",
+    "WSL2 개발 환경 세팅",
+    "SSH 터널링 활용법",
+    "Vim 플러그인 추천",
+    "Docker 컨테이너 경량화 팁",
+    "리눅스 보안 강화 체크리스트",
+    "GRUB 커스텀 테마 적용",
+    "Flatpak vs Snap 비교",
+    "tmux 설정 공유",
+    "Ansible로 서버 관리하기",
+    "리눅스 데스크톱 쇼케이스",
 ]
 
 COMMENT_TEMPLATES = [
-    "좋은 글 감사합니다!",
-    "도움이 됐어요.",
-    "저도 같은 생각이에요.",
-    "공감합니다.",
-    "더 자세히 알려주세요.",
-    "좋은 정보 감사합니다.",
-    "저도 비슷한 경험이 있어요.",
-    "참고하겠습니다!",
-    "응원합니다!",
-    "질문이 있는데요...",
-    "좋은 글이네요.",
-    "감사합니다!",
-    "이런 방법도 있군요!",
-    "저는 좀 다르게 생각하는데, 의견 나눠봐요.",
-    "실무에서도 이렇게 하시나요?",
-    "정리가 잘 되어 있네요.",
+    "좋은 글 감사합니다! 저도 같은 배포판 쓰고 있어요.",
+    "`sudo apt update` 먼저 실행해보셨나요?",
+    "저는 Arch Wiki에서 해결했어요. 참고해보세요.",
+    "Fedora에서도 같은 방법으로 됩니다.",
+    "커널 버전이 뭔가요? `uname -r`로 확인해주세요.",
+    "저도 비슷한 경험이 있어요. Secure Boot 끄니까 해결됐습니다.",
+    "참고하겠습니다! dotfiles 레포 주소 공유 가능하신가요?",
+    "Wayland에서는 안 되는 거 아닌가요?",
+    "좋은 정보네요. 이 설정 그대로 적용했습니다.",
+    "`journalctl -xe`로 로그 확인해보세요.",
+    "저는 좀 다른 방법을 쓰는데, 나중에 글로 정리해볼게요.",
+    "우분투에서 데비안으로 갈아탈까 고민 중인데 참고가 됩니다.",
+    "응원합니다! Arch 수동 설치 성공하면 뿌듯하죠.",
+    "이건 `man` 페이지에도 잘 나와 있어요.",
+    "실무에서도 이렇게 하시나요? 프로덕션 서버에서는 좀 다를 것 같아서요.",
+    "정리가 잘 되어 있네요. 북마크했습니다.",
 ]
 
 TAG_NAMES = [
-    "python", "javascript", "typescript", "react", "nextjs",
-    "fastapi", "django", "flask", "nodejs", "docker",
-    "kubernetes", "aws", "terraform", "mysql", "postgresql",
-    "redis", "git", "cicd", "알고리즘", "자료구조",
-    "면접준비", "취업", "사이드프로젝트", "코드리뷰", "성능최적화",
-    "보안", "테스트", "tdd", "디자인패턴", "아키텍처",
+    "ubuntu", "fedora", "arch", "debian", "mint",
+    "kernel", "systemd", "wayland", "xorg", "gnome",
+    "kde", "i3wm", "docker", "vim", "neovim",
+    "bash", "zsh", "ssh", "nginx", "apache",
+    "보안", "네트워크", "파일시스템", "패키지관리", "dotfiles",
+    "서버관리", "가상화", "백업", "모니터링", "성능최적화",
 ]
 
 POLL_QUESTIONS = [
-    ("가장 선호하는 프로그래밍 언어는?", ["Python", "JavaScript", "TypeScript", "Java", "Go"]),
-    ("개발 시 가장 중요한 것은?", ["코드 품질", "속도 (빠른 구현)", "테스트 커버리지", "문서화"]),
-    ("주로 사용하는 에디터는?", ["VS Code", "IntelliJ", "Vim/Neovim", "기타"]),
-    ("프론트엔드 프레임워크 선호도", ["React", "Vue", "Svelte", "Angular", "Vanilla JS"]),
-    ("백엔드 프레임워크 선호도", ["FastAPI", "Django", "Express", "Spring Boot", "NestJS"]),
-    ("DB 선호도", ["MySQL", "PostgreSQL", "MongoDB", "SQLite"]),
-    ("개발 경력은?", ["학생/취준", "1~2년차", "3~5년차", "5년 이상"]),
-    ("재택 vs 출근?", ["완전 재택", "하이브리드", "완전 출근", "상관없음"]),
-    ("주 몇 시간 코딩하시나요?", ["20시간 이하", "20~40시간", "40~60시간", "60시간 이상"]),
-    ("사이드 프로젝트 하시나요?", ["현재 진행 중", "계획 중", "과거에 했음", "안 함"]),
+    ("선호하는 리눅스 배포판은?", ["Ubuntu", "Fedora", "Arch", "Debian", "기타"]),
+    ("데스크톱 환경 선호도", ["GNOME", "KDE Plasma", "XFCE", "i3/Sway", "없음 (TTY)"]),
+    ("주로 사용하는 셸은?", ["Bash", "Zsh", "Fish", "Nushell"]),
+    ("에디터 선호도", ["Vim/Neovim", "Emacs", "VS Code", "nano", "기타"]),
+    ("패키지 설치 선호도", ["공식 저장소", "Flatpak", "Snap", "AppImage", "직접 빌드"]),
+    ("디스플레이 서버", ["Wayland", "X11", "상관없음", "잘 모르겠음"]),
+    ("리눅스 경력은?", ["1년 미만", "1~3년", "3~5년", "5년 이상"]),
+    ("서버 OS 선호도", ["Ubuntu Server", "RHEL/Rocky", "Debian", "Alpine"]),
+    ("파일 시스템 선호도", ["ext4", "Btrfs", "ZFS", "XFS"]),
+    ("리눅스를 쓰는 이유?", ["오픈소스 철학", "커스텀 자유도", "개발 편의성", "서버 운영", "보안"]),
 ]
 
 REPORT_REASONS = ["spam", "abuse", "inappropriate", "other"]
+
+# 패키지 시드 데이터
+PACKAGES = [
+    ("vim", "Vim", "터미널 기반 텍스트 에디터", "https://www.vim.org", "editor", "apt"),
+    ("neovim", "Neovim", "Vim 기반 하이퍼 확장 에디터", "https://neovim.io", "editor", "apt"),
+    ("docker", "Docker", "컨테이너 플랫폼", "https://www.docker.com", "devtool", "apt"),
+    ("git", "Git", "분산 버전 관리 시스템", "https://git-scm.com", "devtool", "apt"),
+    ("tmux", "tmux", "터미널 멀티플렉서", "https://github.com/tmux/tmux", "terminal", "apt"),
+    ("zsh", "Zsh", "Z 셸", "https://www.zsh.org", "terminal", "apt"),
+    ("htop", "htop", "대화형 프로세스 뷰어", "https://htop.dev", "system", "apt"),
+    ("fzf", "fzf", "커맨드라인 퍼지 파인더", "https://github.com/junegunn/fzf", "utility", "apt"),
+    ("ripgrep", "ripgrep", "초고속 검색 도구", "https://github.com/BurntSushi/ripgrep", "utility", "apt"),
+    ("alacritty", "Alacritty", "GPU 가속 터미널 에뮬레이터", "https://alacritty.org", "terminal", "apt"),
+    ("nginx", "nginx", "웹 서버 및 리버스 프록시", "https://nginx.org", "system", "apt"),
+    ("vlc", "VLC", "멀티미디어 플레이어", "https://www.videolan.org", "multimedia", "apt"),
+    ("gimp", "GIMP", "GNU 이미지 편집기", "https://www.gimp.org", "multimedia", "apt"),
+    ("ufw", "UFW", "간편 방화벽", "https://launchpad.net/ufw", "security", "apt"),
+    ("gnome-shell", "GNOME Shell", "GNOME 데스크톱 환경", "https://www.gnome.org", "desktop", "apt"),
+]
+
+# 패키지 리뷰 템플릿
+REVIEW_TITLES = [
+    "최고의 도구입니다",
+    "매일 사용하는 필수 프로그램",
+    "초보자에게 추천합니다",
+    "기대 이하였습니다",
+    "대안이 더 나은 것 같아요",
+    "설정이 좀 복잡하지만 강력합니다",
+    "리눅스 필수 패키지",
+    "오래 써본 솔직한 후기",
+    "입문용으로 괜찮습니다",
+    "프로덕션에서 검증된 도구",
+]
+
+REVIEW_CONTENTS = [
+    "설치 후 바로 쓸 수 있어서 좋았습니다. 문서도 잘 되어 있고요.",
+    "처음에는 러닝 커브가 있지만 익숙해지면 생산성이 확 올라갑니다.",
+    "다른 대안도 써봤지만 결국 이걸로 돌아오게 됩니다.",
+    "솔직히 기대만큼은 아니었어요. 제 사용 패턴에는 안 맞는 듯합니다.",
+    "가볍고 빠릅니다. 리소스 적은 서버에서도 잘 돌아갑니다.",
+    "플러그인 생태계가 활발해서 확장성이 좋습니다.",
+    "버그가 가끔 있지만 업데이트가 빠릅니다.",
+    "UI가 직관적이지 않아서 처음에 헤맸습니다.",
+    "오픈소스라서 커스텀이 자유롭고 커뮤니티도 활발합니다.",
+    "서버 관리할 때 없으면 안 되는 도구입니다.",
+]
+
+# 위키 FAQ 데이터
+WIKI_PAGES_DATA = [
+    (
+        "Ubuntu 설치 가이드",
+        "ubuntu-install-guide",
+        """## Ubuntu 설치 가이드
+
+### USB 부팅 디스크 만들기
+
+```bash
+# balenaEtcher 또는 dd 명령 사용
+sudo dd if=ubuntu-24.04-desktop-amd64.iso of=/dev/sdX bs=4M status=progress
+```
+
+### 설치 과정
+1. USB로 부팅 → "Install Ubuntu" 선택
+2. 언어, 키보드 레이아웃 선택
+3. 디스크 파티션 설정 (자동 또는 수동)
+4. 사용자 계정 생성
+5. 설치 완료 후 재부팅
+
+### 설치 후 필수 작업
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install build-essential curl wget
+```
+
+> **팁**: 듀얼 부팅 시 Windows를 먼저 설치한 후 Ubuntu를 설치하세요.""",
+        ["ubuntu", "파일시스템"],
+    ),
+    (
+        "Arch Linux 설치 가이드",
+        "arch-install-guide",
+        """## Arch Linux 수동 설치
+
+### 사전 준비
+- USB 부팅 미디어 준비
+- 유선 인터넷 연결 권장 (`ip link`로 확인)
+
+### 핵심 단계
+```bash
+# 1. 파티션 (UEFI 예시)
+fdisk /dev/sda
+# EFI: 512M, swap: RAM 크기, root: 나머지
+
+# 2. 포맷 및 마운트
+mkfs.fat -F32 /dev/sda1
+mkswap /dev/sda2 && swapon /dev/sda2
+mkfs.ext4 /dev/sda3
+mount /dev/sda3 /mnt
+
+# 3. 기본 시스템 설치
+pacstrap /mnt base linux linux-firmware
+
+# 4. fstab 생성
+genfstab -U /mnt >> /mnt/etc/fstab
+
+# 5. chroot 진입
+arch-chroot /mnt
+```
+
+### 자주 빠뜨리는 것
+- `networkmanager` 설치 + `systemctl enable NetworkManager`
+- 부트로더 (`grub` 또는 `systemd-boot`) 설치""",
+        ["arch", "파일시스템"],
+    ),
+    (
+        "한글 입력기 설정",
+        "korean-input-setup",
+        """## 리눅스 한글 입력 설정 (IBus + 한글)
+
+### 패키지 설치
+```bash
+# Ubuntu/Debian
+sudo apt install ibus-hangul
+
+# Fedora
+sudo dnf install ibus-hangul
+
+# Arch
+sudo pacman -S ibus-hangul
+```
+
+### 환경 변수 설정
+`~/.profile` 또는 `~/.xprofile`에 추가:
+```bash
+export GTK_IM_MODULE=ibus
+export QT_IM_MODULE=ibus
+export XMODIFIERS=@im=ibus
+ibus-daemon -drx
+```
+
+### IBus 설정
+1. `ibus-setup` 실행
+2. Input Method → Add → Korean → Hangul
+3. 한영 전환 키: `Hangul` 또는 `Shift+Space`
+
+> **Wayland 사용자**: GNOME Settings → Keyboard → Input Sources에서 추가하세요.""",
+        ["ubuntu", "fedora", "arch"],
+    ),
+    (
+        "Windows 듀얼 부팅 설정",
+        "dual-boot-windows",
+        """## Windows + Linux 듀얼 부팅
+
+### 준비 사항
+1. Windows에서 디스크 축소 (디스크 관리 → 볼륨 축소)
+2. Secure Boot 비활성화 (BIOS 설정)
+3. Fast Startup 비활성화 (Windows 전원 옵션)
+
+### 설치 순서
+Windows 먼저 → Linux 나중 (GRUB이 Windows를 자동 감지)
+
+### GRUB에서 Windows 부팅 항목 없을 때
+```bash
+sudo os-prober
+sudo update-grub
+```
+
+### 시간 동기화 문제
+Windows는 로컬 시간, Linux는 UTC 사용 → 시간이 어긋남:
+```bash
+# Linux에서 로컬 시간 사용하도록 변경
+timedatectl set-local-rtc 1
+```""",
+        ["ubuntu", "파일시스템"],
+    ),
+    (
+        "NVIDIA 드라이버 설치",
+        "nvidia-driver-install",
+        """## NVIDIA 드라이버 설치 가이드
+
+### Ubuntu
+```bash
+# 추천 드라이버 확인
+ubuntu-drivers devices
+
+# 자동 설치 (권장)
+sudo ubuntu-drivers autoinstall
+
+# 또는 특정 버전 설치
+sudo apt install nvidia-driver-550
+```
+
+### Fedora
+```bash
+# RPM Fusion 저장소 추가 필요
+sudo dnf install akmod-nvidia
+```
+
+### Arch
+```bash
+sudo pacman -S nvidia nvidia-utils
+```
+
+### Secure Boot 환경
+드라이버 설치 후 부팅 실패 시 MOK 등록 필요:
+```bash
+sudo mokutil --import /var/lib/dkms/mok.pub
+# 재부팅 → MOK Manager → Enroll MOK
+```
+
+### 확인
+```bash
+nvidia-smi
+# GPU 정보와 드라이버 버전이 표시되면 성공
+```""",
+        ["ubuntu", "fedora", "arch"],
+    ),
+    (
+        "SSH 키 생성 및 설정",
+        "ssh-key-setup",
+        """## SSH 키 인증 설정
+
+### 키 생성
+```bash
+ssh-keygen -t ed25519 -C "your@email.com"
+# 기본 경로: ~/.ssh/id_ed25519
+```
+
+### 서버에 공개키 복사
+```bash
+ssh-copy-id user@server-ip
+# 또는 수동으로
+cat ~/.ssh/id_ed25519.pub | ssh user@server-ip "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+### SSH 설정 파일 (~/.ssh/config)
+```
+Host myserver
+    HostName 192.168.1.100
+    User admin
+    IdentityFile ~/.ssh/id_ed25519
+    Port 22
+```
+
+### 보안 강화 (서버측 /etc/ssh/sshd_config)
+```
+PasswordAuthentication no
+PermitRootLogin no
+PubkeyAuthentication yes
+```
+
+> **중요**: `PasswordAuthentication no` 설정 전에 키 인증이 동작하는지 반드시 확인하세요.""",
+        ["ssh", "보안", "서버관리"],
+    ),
+    (
+        "systemd 서비스 만들기",
+        "systemd-service-create",
+        """## 커스텀 systemd 서비스 작성법
+
+### 서비스 파일 위치
+- 시스템 서비스: `/etc/systemd/system/`
+- 사용자 서비스: `~/.config/systemd/user/`
+
+### 기본 템플릿
+```ini
+[Unit]
+Description=My Application
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/opt/myapp
+ExecStart=/opt/myapp/start.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 주요 명령어
+```bash
+sudo systemctl daemon-reload    # 파일 변경 후 필수
+sudo systemctl enable myapp     # 부팅 시 자동 시작
+sudo systemctl start myapp
+sudo systemctl status myapp
+journalctl -u myapp -f          # 실시간 로그
+```""",
+        ["systemd", "서버관리"],
+    ),
+    (
+        "GRUB 부트로더 복구",
+        "grub-recovery",
+        """## GRUB 복구 가이드
+
+### 증상
+- 부팅 시 `grub rescue>` 프롬프트
+- "no such partition" 에러
+- Windows 업데이트 후 GRUB 사라짐
+
+### Live USB로 복구
+```bash
+# 1. Live USB 부팅 후 파티션 확인
+sudo fdisk -l
+
+# 2. 루트 파티션 마운트
+sudo mount /dev/sda3 /mnt
+sudo mount /dev/sda1 /mnt/boot/efi  # UEFI인 경우
+
+# 3. chroot 진입
+sudo mount --bind /dev /mnt/dev
+sudo mount --bind /proc /mnt/proc
+sudo mount --bind /sys /mnt/sys
+sudo chroot /mnt
+
+# 4. GRUB 재설치
+grub-install --target=x86_64-efi --efi-directory=/boot/efi
+update-grub
+
+# 5. chroot 탈출 및 재부팅
+exit
+sudo umount -R /mnt
+reboot
+```""",
+        ["ubuntu", "arch"],
+    ),
+    (
+        "UFW 방화벽 설정",
+        "firewall-ufw-guide",
+        """## UFW 방화벽 설정 가이드
+
+### 기본 사용법
+```bash
+sudo ufw enable               # 활성화
+sudo ufw status verbose        # 상태 확인
+sudo ufw default deny incoming # 기본 정책: 수신 차단
+sudo ufw default allow outgoing
+```
+
+### 포트 허용
+```bash
+sudo ufw allow 22/tcp          # SSH
+sudo ufw allow 80,443/tcp      # HTTP/HTTPS
+sudo ufw allow from 192.168.1.0/24  # 특정 서브넷
+```
+
+### 규칙 삭제
+```bash
+sudo ufw status numbered
+sudo ufw delete 3              # 번호로 삭제
+```
+
+> **주의**: SSH 포트(22)를 차단하면 원격 접속이 끊깁니다. 반드시 SSH 허용 후 활성화하세요.""",
+        ["보안", "서버관리"],
+    ),
+    (
+        "Docker 시작하기",
+        "docker-getting-started",
+        """## Docker 기본 사용법
+
+### 설치 (Ubuntu)
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# 로그아웃 후 재로그인
+```
+
+### 핵심 명령어
+```bash
+docker run -d --name myapp -p 8080:80 nginx
+docker ps                  # 실행 중인 컨테이너
+docker logs -f myapp       # 로그 확인
+docker exec -it myapp bash # 컨테이너 진입
+docker stop myapp && docker rm myapp
+```
+
+### Dockerfile 예시
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "main.py"]
+```
+
+### Docker Compose
+```yaml
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8000"
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+```""",
+        ["docker", "서버관리"],
+    ),
+    (
+        "Vim 기본 사용법",
+        "vim-basic-usage",
+        """## Vim 입문 가이드
+
+### 모드
+- **Normal**: 이동 + 명령 (기본)
+- **Insert**: `i`, `a`, `o`로 진입, `Esc`로 탈출
+- **Visual**: `v`(문자), `V`(줄), `Ctrl+v`(블록)
+- **Command**: `:`로 진입
+
+### 필수 명령어
+```
+이동: h(←) j(↓) k(↑) l(→), w(단어), gg(처음), G(끝)
+편집: dd(줄 삭제), yy(줄 복사), p(붙여넣기), u(실행취소)
+검색: /pattern, n(다음), N(이전)
+저장: :w, :q, :wq, :q!(강제 종료)
+```
+
+### .vimrc 기본 설정
+```vim
+set number          " 줄 번호
+set relativenumber  " 상대 줄 번호
+set tabstop=4       " 탭 너비
+set expandtab       " 탭 → 스페이스
+set hlsearch        " 검색 하이라이트
+syntax on
+```
+
+> **팁**: `vimtutor` 명령으로 30분짜리 튜토리얼을 먼저 해보세요.""",
+        ["vim"],
+    ),
+    (
+        "패키지 매니저 비교",
+        "package-manager-comparison",
+        """## 리눅스 패키지 매니저 비교
+
+| 패키지 매니저 | 배포판 | 명령 예시 |
+|------------|--------|---------|
+| APT | Ubuntu, Debian | `apt install vim` |
+| DNF | Fedora, RHEL | `dnf install vim` |
+| Pacman | Arch, Manjaro | `pacman -S vim` |
+| Zypper | openSUSE | `zypper install vim` |
+
+### 자주 쓰는 작업 비교
+
+| 작업 | APT | DNF | Pacman |
+|------|-----|-----|--------|
+| 업데이트 | `apt update` | `dnf check-update` | `pacman -Sy` |
+| 업그레이드 | `apt upgrade` | `dnf upgrade` | `pacman -Syu` |
+| 검색 | `apt search` | `dnf search` | `pacman -Ss` |
+| 삭제 | `apt remove` | `dnf remove` | `pacman -R` |
+| 정보 | `apt show` | `dnf info` | `pacman -Si` |
+
+### 범용 패키지 형식
+- **Flatpak**: 샌드박스, GNOME 생태계
+- **Snap**: Canonical, 자동 업데이트
+- **AppImage**: 설치 불필요, 단일 파일""",
+        ["패키지관리", "ubuntu", "fedora", "arch"],
+    ),
+    (
+        "리눅스 디렉토리 구조",
+        "linux-directory-structure",
+        """## FHS (Filesystem Hierarchy Standard)
+
+```
+/
+├── bin/    → 필수 바이너리 (ls, cp, mv)
+├── boot/  → 부트로더, 커널 이미지
+├── dev/   → 디바이스 파일 (/dev/sda, /dev/null)
+├── etc/   → 시스템 설정 파일
+├── home/  → 사용자 홈 디렉토리
+├── lib/   → 공유 라이브러리
+├── mnt/   → 임시 마운트 포인트
+├── opt/   → 서드파티 소프트웨어
+├── proc/  → 프로세스 가상 파일시스템
+├── root/  → root 사용자 홈
+├── sys/   → 커널/하드웨어 가상 파일시스템
+├── tmp/   → 임시 파일 (재부팅 시 삭제)
+├── usr/   → 사용자 프로그램, 라이브러리
+└── var/   → 가변 데이터 (로그, 캐시, DB)
+```
+
+### 자주 쓰는 경로
+- `/etc/fstab` — 마운트 테이블
+- `/var/log/syslog` — 시스템 로그
+- `/proc/cpuinfo` — CPU 정보
+- `/sys/class/net/` — 네트워크 인터페이스""",
+        ["파일시스템"],
+    ),
+    (
+        "Cron 작업 스케줄링",
+        "cron-job-setup",
+        """## Cron 사용법
+
+### crontab 편집
+```bash
+crontab -e    # 현재 사용자
+sudo crontab -e  # root
+```
+
+### 형식
+```
+분  시  일  월  요일  명령
+*   *   *   *   *     command
+
+# 예시
+0 2 * * * /home/user/backup.sh        # 매일 02:00
+*/5 * * * * /usr/bin/health-check.sh   # 5분마다
+0 0 * * 0 apt update && apt upgrade -y # 매주 일요일 자정
+```
+
+### 특수 키워드
+```
+@reboot    # 부팅 시 1회
+@hourly    # 매시간 (= 0 * * * *)
+@daily     # 매일 (= 0 0 * * *)
+@weekly    # 매주
+@monthly   # 매월
+```
+
+### 로그 확인
+```bash
+grep CRON /var/log/syslog
+```
+
+> **주의**: cron은 사용자 환경 변수를 로드하지 않습니다. 스크립트에서 절대 경로를 사용하세요.""",
+        ["서버관리"],
+    ),
+    (
+        "스왑 파티션 설정",
+        "swap-partition-setup",
+        """## 스왑 설정 가이드
+
+### 스왑 파일 생성 (파티션 없이)
+```bash
+# 4GB 스왑 파일 생성
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# 영구 설정 (/etc/fstab에 추가)
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+### 스왑 크기 권장
+| RAM | 스왑 (절전 미사용) | 스왑 (절전 사용) |
+|-----|-------------------|----------------|
+| 2GB | 2GB | 4GB |
+| 8GB | 4GB | 12GB |
+| 16GB+ | 4~8GB | RAM + 2GB |
+
+### Swappiness 조정
+```bash
+# 현재 값 확인 (기본 60)
+cat /proc/sys/vm/swappiness
+
+# SSD에서는 낮추는 것이 권장 (10~20)
+sudo sysctl vm.swappiness=10
+# 영구 적용
+echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
+```""",
+        ["파일시스템", "성능최적화"],
+    ),
+]
 
 
 def _random_past(max_days: int = 90) -> datetime:
@@ -335,6 +954,11 @@ async def clear_existing_data():
     print("기존 데이터 삭제 중...")
     async with transactional() as cur:
         await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+        # 추천 피드
+        await cur.execute("TRUNCATE TABLE user_post_score")
+        # 위키
+        await cur.execute("TRUNCATE TABLE wiki_page_tag")
+        await cur.execute("TRUNCATE TABLE wiki_page")
         # 패키지
         await cur.execute("TRUNCATE TABLE package_review")
         await cur.execute("TRUNCATE TABLE package")
@@ -355,13 +979,16 @@ async def clear_existing_data():
         await cur.execute("TRUNCATE TABLE post_bookmark")
         # 콘텐츠
         await cur.execute("TRUNCATE TABLE post_image")
+        await cur.execute("TRUNCATE TABLE notification_setting")
         await cur.execute("TRUNCATE TABLE notification")
         await cur.execute("TRUNCATE TABLE report")
         await cur.execute("TRUNCATE TABLE post_view_log")
         await cur.execute("TRUNCATE TABLE post_like")
         await cur.execute("TRUNCATE TABLE comment")
+        await cur.execute("TRUNCATE TABLE post_draft")
         await cur.execute("TRUNCATE TABLE post")
         # 인증
+        await cur.execute("TRUNCATE TABLE social_account")
         await cur.execute("TRUNCATE TABLE email_verification")
         await cur.execute("TRUNCATE TABLE refresh_token")
         await cur.execute("TRUNCATE TABLE image")
@@ -388,23 +1015,26 @@ async def clear_existing_data():
 
 
 async def seed_users(cfg: dict):
-    """사용자 데이터 생성 (이메일 인증 완료 상태)."""
+    """사용자 데이터 생성 (이메일 인증 완료, distro 분포 포함)."""
     n = cfg["users"]
     print(f"사용자 {n}명 생성 중...")
+
+    distro_pool = random.choices(DISTROS, weights=DISTRO_WEIGHTS, k=n)
 
     users_data = []
     for i in range(1, n + 1):
         email = f"user{i}@example.com"
         nickname = f"user_{i:05d}"
         role = "admin" if i == 1 else "user"
+        distro = distro_pool[i - 1]
         created_at = _random_past(365)
-        # email_verified=1 — 글쓰기 가능하도록
-        users_data.append((email, 1, nickname, HASHED_PASSWORD, None, role, created_at, created_at))
+        users_data.append((email, 1, nickname, 1, HASHED_PASSWORD, None, role, distro, created_at, created_at))
 
     async with transactional() as cur:
         await cur.executemany(
-            """INSERT INTO user (email, email_verified, nickname, password, profile_img, role, created_at, terms_agreed_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            """INSERT INTO user
+            (email, email_verified, nickname, nickname_set, password, profile_img, role, distro, created_at, terms_agreed_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             users_data,
         )
     print(f"  ✓ 사용자 {n}명 (admin: user1, 비밀번호: Test1234!)")
@@ -416,7 +1046,7 @@ async def seed_users(cfg: dict):
 
 
 async def seed_posts(cfg: dict):
-    """게시글 데이터 생성 (마크다운 콘텐츠 포함)."""
+    """게시글 데이터 생성 (리눅스 마크다운 콘텐츠 포함)."""
     n = cfg["posts"]
     print(f"게시글 {n}개 생성 중...")
 
@@ -481,13 +1111,12 @@ async def seed_comments(cfg: dict):
         parent_id = random.randint(1, root_count)
         content = random.choice(COMMENT_TEMPLATES) + " " + fake.sentence()
         author_id = random.randint(1, cfg["users"])
-        # parent_id에 해당하는 댓글의 post_id를 알 수 없으므로 조회 필요
-        reply_data.append((content, author_id, parent_id, created_at))
+        reply_data.append((content, author_id, parent_id))
 
     if reply_data:
         async with transactional() as cur:
             # 대댓글의 post_id를 부모 댓글에서 가져와 삽입
-            for content, author_id, parent_id, _ in reply_data:
+            for content, author_id, parent_id in reply_data:
                 await cur.execute("SELECT post_id FROM comment WHERE id = %s", (parent_id,))
                 row = await cur.fetchone()
                 if row:
@@ -539,7 +1168,6 @@ async def seed_bookmarks(cfg: dict):
 async def seed_comment_likes(cfg: dict):
     """댓글 좋아요 생성."""
     n = cfg["comment_likes"]
-    # 댓글 총 수를 사용
     pairs = _unique_pairs(n, cfg["users"], cfg["comments"])
     print(f"댓글 좋아요 {len(pairs)}개 생성 중...")
 
@@ -623,6 +1251,43 @@ async def seed_tags(cfg: dict):
 
 
 # ─────────────────────────────────────────────
+# 위키 (FAQ 스타일)
+# ─────────────────────────────────────────────
+
+
+async def seed_wiki_pages(cfg: dict):
+    """FAQ 스타일 위키 페이지 + 태그 연결 생성."""
+    n = min(cfg["wiki_pages"], len(WIKI_PAGES_DATA))
+    print(f"위키 페이지 {n}개 생성 중...")
+
+    async with transactional() as cur:
+        for i in range(n):
+            title, slug, content, tag_names = WIKI_PAGES_DATA[i]
+            author_id = random.randint(1, cfg["users"])
+            views_count = random.randint(10, 500)
+            created_at = _random_past(120)
+
+            await cur.execute(
+                """INSERT INTO wiki_page (title, slug, content, author_id, views_count, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)""",
+                (title, slug, content, author_id, views_count, created_at),
+            )
+            wiki_page_id = cur.lastrowid
+
+            # 태그 연결 (기존 tag 테이블에서 id 조회)
+            for tag_name in tag_names:
+                await cur.execute("SELECT id FROM tag WHERE name = %s", (tag_name,))
+                row = await cur.fetchone()
+                if row:
+                    await cur.execute(
+                        "INSERT IGNORE INTO wiki_page_tag (wiki_page_id, tag_id) VALUES (%s, %s)",
+                        (wiki_page_id, row[0]),
+                    )
+
+    print(f"  ✓ 위키 페이지 {n}개 (FAQ, 태그 연결)")
+
+
+# ─────────────────────────────────────────────
 # 투표
 # ─────────────────────────────────────────────
 
@@ -632,7 +1297,6 @@ async def seed_polls(cfg: dict):
     n = min(cfg["polls"], len(POLL_QUESTIONS), cfg["posts"])
     print(f"투표 {n}개 생성 중...")
 
-    # 투표를 붙일 게시글 선택 (앞쪽 게시글에서 순서대로)
     poll_post_ids = random.sample(range(1, cfg["posts"] + 1), n)
     poll_post_ids.sort()
 
@@ -649,7 +1313,6 @@ async def seed_polls(cfg: dict):
             )
             poll_id = cur.lastrowid
 
-            # 선택지 삽입
             option_ids = []
             for sort_order, opt_text in enumerate(options):
                 await cur.execute(
@@ -672,6 +1335,81 @@ async def seed_polls(cfg: dict):
 
 
 # ─────────────────────────────────────────────
+# 패키지 + 리뷰
+# ─────────────────────────────────────────────
+
+
+async def seed_packages():
+    """샘플 패키지 데이터 생성 (admin user id=1이 등록)."""
+    print(f"패키지 {len(PACKAGES)}개 생성 중...")
+
+    async with transactional() as cur:
+        await cur.executemany(
+            """INSERT IGNORE INTO package
+            (name, display_name, description, homepage_url, category, package_manager, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, 1)""",
+            PACKAGES,
+        )
+    print(f"  ✓ 패키지 {len(PACKAGES)}개 (created_by=admin)")
+
+
+async def seed_package_reviews(cfg: dict):
+    """패키지 리뷰 생성 (평점 1~5 균등 분포)."""
+    n = cfg["package_reviews"]
+    num_packages = len(PACKAGES)
+    print(f"패키지 리뷰 {n}개 생성 중...")
+
+    # (package_id, user_id) 유니크 쌍 생성
+    pairs = _unique_pairs(n, num_packages, cfg["users"])
+
+    data = []
+    for pkg_id, user_id in pairs:
+        rating = random.randint(1, 5)
+        title = random.choice(REVIEW_TITLES)
+        content = random.choice(REVIEW_CONTENTS)
+        created_at = _random_past(90)
+        data.append((pkg_id, user_id, rating, title, content, created_at))
+
+    async with transactional() as cur:
+        await cur.executemany(
+            """INSERT IGNORE INTO package_review
+            (package_id, user_id, rating, title, content, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s)""",
+            data,
+        )
+    print(f"  ✓ 패키지 리뷰 {len(pairs)}개 (평점 1~5 균등)")
+
+
+# ─────────────────────────────────────────────
+# 알림 설정
+# ─────────────────────────────────────────────
+
+
+async def seed_notification_settings(cfg: dict):
+    """일부 사용자의 알림 설정 커스텀 (나머지는 기본 ON)."""
+    n = cfg["notification_settings"]
+    print(f"알림 설정 {n}개 생성 중...")
+
+    user_ids = random.sample(range(1, cfg["users"] + 1), min(n, cfg["users"]))
+    setting_fields = ["comment_enabled", "like_enabled", "mention_enabled", "follow_enabled", "bookmark_enabled"]
+
+    data = []
+    for user_id in user_ids:
+        # 각 타입별로 20% 확률로 OFF
+        settings = [0 if random.random() < 0.2 else 1 for _ in setting_fields]
+        data.append((user_id, *settings))
+
+    async with transactional() as cur:
+        await cur.executemany(
+            """INSERT IGNORE INTO notification_setting
+            (user_id, comment_enabled, like_enabled, mention_enabled, follow_enabled, bookmark_enabled)
+            VALUES (%s, %s, %s, %s, %s, %s)""",
+            data,
+        )
+    print(f"  ✓ 알림 설정 {len(user_ids)}명 (각 타입 ~20% OFF)")
+
+
+# ─────────────────────────────────────────────
 # 알림
 # ─────────────────────────────────────────────
 
@@ -681,7 +1419,7 @@ async def seed_notifications(cfg: dict):
     n = cfg["notifications"]
     print(f"알림 {n}개 생성 중...")
 
-    notif_types = ["comment", "like", "mention", "follow"]
+    notif_types = ["comment", "like", "mention", "follow", "bookmark"]
     data = []
     for _ in range(n):
         user_id = random.randint(1, cfg["users"])
@@ -691,7 +1429,11 @@ async def seed_notifications(cfg: dict):
             actor_id = random.randint(1, cfg["users"])
 
         ntype = random.choice(notif_types)
-        post_id = random.randint(1, cfg["posts"])
+        # follow는 post_id가 NULL
+        if ntype == "follow":
+            post_id = None
+        else:
+            post_id = random.randint(1, cfg["posts"])
         comment_id = random.randint(1, cfg["comments"]) if ntype in ("comment", "mention") else None
         is_read = 1 if random.random() < 0.6 else 0
         created_at = _random_past(30)
@@ -731,7 +1473,7 @@ async def seed_reports(cfg: dict):
         reason = random.choice(REPORT_REASONS)
         description = fake.sentence() if reason == "other" else None
         status = random.choice(["pending", "pending", "pending", "resolved", "dismissed"])  # 60% pending
-        resolved_by = 1 if status != "pending" else None  # admin이 처리
+        resolved_by = 1 if status != "pending" else None
         resolved_at = _random_past(7) if status != "pending" else None
         created_at = _random_past(30)
 
@@ -778,7 +1520,6 @@ async def seed_dms(cfg: dict):
     n_msg = cfg["dm_messages_per_conv"]
     print(f"DM 대화 {n_conv}개 (대화당 ~{n_msg}개 메시지) 생성 중...")
 
-    # 중복 없는 대화 쌍 생성 (participant1 < participant2 정규화)
     conv_pairs = _unique_pairs(n_conv, cfg["users"], cfg["users"], exclude_same=True)
 
     total_messages = 0
@@ -796,7 +1537,6 @@ async def seed_dms(cfg: dict):
             if not conv_id:
                 continue
 
-            # 메시지 생성
             msg_count = random.randint(max(1, n_msg - 2), n_msg + 3)
             last_msg_at = created_at
             for j in range(msg_count):
@@ -813,52 +1553,12 @@ async def seed_dms(cfg: dict):
                 last_msg_at = msg_at
                 total_messages += 1
 
-            # last_message_at 업데이트
             await cur.execute(
                 "UPDATE dm_conversation SET last_message_at = %s WHERE id = %s",
                 (last_msg_at, conv_id),
             )
 
     print(f"  ✓ DM 대화 {n_conv}개, 메시지 {total_messages}개")
-
-
-# ─────────────────────────────────────────────
-# 패키지
-# ─────────────────────────────────────────────
-
-
-# 패키지 시드 데이터
-PACKAGES = [
-    ('vim', 'Vim', '터미널 기반 텍스트 에디터', 'https://www.vim.org', 'editor', 'apt'),
-    ('neovim', 'Neovim', 'Vim 기반 하이퍼 확장 에디터', 'https://neovim.io', 'editor', 'apt'),
-    ('docker', 'Docker', '컨테이너 플랫폼', 'https://www.docker.com', 'devtool', 'apt'),
-    ('git', 'Git', '분산 버전 관리 시스템', 'https://git-scm.com', 'devtool', 'apt'),
-    ('tmux', 'tmux', '터미널 멀티플렉서', 'https://github.com/tmux/tmux', 'terminal', 'apt'),
-    ('zsh', 'Zsh', 'Z 셸', 'https://www.zsh.org', 'terminal', 'apt'),
-    ('htop', 'htop', '대화형 프로세스 뷰어', 'https://htop.dev', 'system', 'apt'),
-    ('fzf', 'fzf', '커맨드라인 퍼지 파인더', 'https://github.com/junegunn/fzf', 'utility', 'apt'),
-    ('ripgrep', 'ripgrep', '초고속 검색 도구', 'https://github.com/BurntSushi/ripgrep', 'utility', 'apt'),
-    ('alacritty', 'Alacritty', 'GPU 가속 터미널 에뮬레이터', 'https://alacritty.org', 'terminal', 'apt'),
-    ('nginx', 'nginx', '웹 서버 및 리버스 프록시', 'https://nginx.org', 'system', 'apt'),
-    ('vlc', 'VLC', '멀티미디어 플레이어', 'https://www.videolan.org', 'multimedia', 'apt'),
-    ('gimp', 'GIMP', 'GNU 이미지 편집기', 'https://www.gimp.org', 'multimedia', 'apt'),
-    ('ufw', 'UFW', '간편 방화벽', 'https://launchpad.net/ufw', 'security', 'apt'),
-    ('gnome-shell', 'GNOME Shell', 'GNOME 데스크톱 환경', 'https://www.gnome.org', 'desktop', 'apt'),
-]
-
-
-async def seed_packages():
-    """샘플 패키지 데이터 생성 (admin user id=1이 등록)."""
-    print(f"패키지 {len(PACKAGES)}개 생성 중...")
-
-    async with transactional() as cur:
-        await cur.executemany(
-            """INSERT IGNORE INTO package
-            (name, display_name, description, homepage_url, category, package_manager, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, 1)""",
-            PACKAGES,
-        )
-    print(f"  ✓ 패키지 {len(PACKAGES)}개 (created_by=admin)")
 
 
 # ─────────────────────────────────────────────
@@ -889,6 +1589,7 @@ async def main():
     print(f"  사용자: {cfg['users']}, 게시글: {cfg['posts']}")
     print(f"  댓글: {cfg['comments']}, 좋아요: {cfg['post_likes']}")
     print(f"  태그: {cfg['tags']}, 투표: {cfg['polls']}, DM: {cfg['dm_conversations']}")
+    print(f"  위키: {cfg['wiki_pages']}, 패키지 리뷰: {cfg['package_reviews']}")
     print("=" * 50)
 
     await init_db()
@@ -911,12 +1612,15 @@ async def main():
         await seed_posts(cfg)
         await seed_comments(cfg)
         await seed_tags(cfg)
+        await seed_wiki_pages(cfg)
         await seed_polls(cfg)
         await seed_post_likes(cfg)
         await seed_bookmarks(cfg)
         await seed_comment_likes(cfg)
         await seed_follows(cfg)
         await seed_blocks(cfg)
+        await seed_package_reviews(cfg)
+        await seed_notification_settings(cfg)
         await seed_notifications(cfg)
         await seed_reports(cfg)
         await seed_view_logs(cfg)
