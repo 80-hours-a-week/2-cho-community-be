@@ -19,6 +19,8 @@ on:
       - '.github/workflows/python-app.yml'
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   test:
     name: Test & Lint
