@@ -361,6 +361,35 @@ async def save_wiki_page_tags(wiki_page_id: int, tag_ids: list[int]) -> None:
             )
 
 
+async def get_popular_wiki_tags(limit: int = 10) -> list[dict]:
+    """위키 페이지에서 가장 많이 사용된 태그를 반환합니다.
+
+    Args:
+        limit: 반환할 태그 수.
+
+    Returns:
+        태그 딕셔너리 목록 (name, page_count 포함).
+    """
+    async with get_connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT t.id, t.name, COUNT(wpt.wiki_page_id) AS page_count
+                FROM tag t
+                INNER JOIN wiki_page_tag wpt ON t.id = wpt.tag_id
+                INNER JOIN wiki_page wp ON wpt.wiki_page_id = wp.id AND wp.deleted_at IS NULL
+                GROUP BY t.id, t.name
+                ORDER BY page_count DESC, t.name ASC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return [
+                {"id": row[0], "name": row[1], "page_count": row[2]}
+                for row in await cur.fetchall()
+            ]
+
+
 async def get_wiki_page_tags(wiki_page_id: int) -> list[dict]:
     """위키 페이지의 태그 목록을 조회합니다.
 
