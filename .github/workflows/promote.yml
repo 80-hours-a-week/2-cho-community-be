@@ -1,0 +1,219 @@
+###############################################################################
+# Staging → Prod 프로모션 — 1회 빌드 → staging 배포/검증 → 승인 → prod 배포/검증
+#
+# 동일 이미지 SHA를 staging에서 검증 후 prod로 승격.
+# prod environment에 Required Reviewers 설정 필요 (GitHub UI 승인 게이트).
+#
+# 사전 설정:
+#   - Repository variable: AWS_ACCOUNT_ID
+#   - Environment secrets (staging, prod): INFRA_REPO_PAT
+#   - prod environment: Required Reviewers 보호 규칙
+###############################################################################
+
+name: Promote — Backend (Staging → Prod)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: promote-backend
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # ─── 1. 이미지 빌드 (1회만, staging ECR에 push) ───────────────────────
+  build:
+    name: "Build & Push"
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/my-community-staging-github-actions
+          aws-region: ap-northeast-2
+
+      - id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - id: meta
+        run: echo "tag=sha-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker build --provenance=false --platform linux/amd64 \
+            -f Dockerfile -t "${REGISTRY}/my-community-staging-backend-k8s:${TAG}" .
+          docker push "${REGISTRY}/my-community-staging-backend-k8s:${TAG}"
+
+  # ─── 2. Staging 배포 + 스모크 테스트 ──────────────────────────────────
+  deploy-staging:
+    name: "Deploy to Staging"
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: revenantonthemission/2-cho-community-infra
+          token: ${{ secrets.INFRA_REPO_PAT }}
+          path: infra
+
+      - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+        with:
+          kustomize-version: "5.4.3"
+
+      - name: Update staging image tag
+        working-directory: infra/k8s/overlays/staging
+        env:
+          REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-2.amazonaws.com
+          TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          kustomize edit set image \
+            "community-backend=${REGISTRY}/my-community-staging-backend-k8s:${TAG}"
+
+      - name: Commit and push
+        working-directory: infra
+        env:
+          TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/staging/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 스킵"
+            exit 0
+          fi
+          git commit -m "deploy(staging): backend → ${TAG} [skip ci]"
+          PUSHED=false
+          for i in 1 2 3; do
+            if git push origin main; then PUSHED=true; break; fi
+            git pull --rebase origin main
+          done
+          if [ "${PUSHED}" = "false" ]; then
+            echo "::error::Push 실패"; exit 1
+          fi
+
+  smoke-staging:
+    name: "Smoke Test (Staging)"
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ArgoCD sync
+        run: sleep 90
+
+      - name: Verify staging endpoints
+        env:
+          API_URL: "https://api-staging.my-community.shop"
+          FE_URL: "https://staging.my-community.shop"
+        run: |
+          for url in "${API_URL}/health" "${API_URL}/v1/posts/" "${FE_URL}"; do
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "$url")
+            if [ "$STATUS" != "200" ]; then
+              echo "::error::${url} returned HTTP ${STATUS}"
+              exit 1
+            fi
+            echo "${url}: OK"
+          done
+
+  # ─── 3. Prod 배포 (승인 게이트) + 스모크 테스트 ───────────────────────
+  deploy-prod:
+    name: "Deploy to Prod (승인 필요)"
+    needs: [build, smoke-staging]
+    runs-on: ubuntu-latest
+    environment: prod  # ← Required Reviewers 승인 대기
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Copy image to prod ECR
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/my-community-prod-github-actions
+          aws-region: ap-northeast-2
+
+      - name: Pull from staging, push to prod ECR
+        env:
+          ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+          TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          aws ecr get-login-password --region ap-northeast-2 | \
+            docker login --username AWS --password-stdin "${ACCOUNT}.dkr.ecr.ap-northeast-2.amazonaws.com"
+          docker pull "${ACCOUNT}.dkr.ecr.ap-northeast-2.amazonaws.com/my-community-staging-backend-k8s:${TAG}"
+          docker tag "${ACCOUNT}.dkr.ecr.ap-northeast-2.amazonaws.com/my-community-staging-backend-k8s:${TAG}" \
+                     "${ACCOUNT}.dkr.ecr.ap-northeast-2.amazonaws.com/my-community-prod-backend-k8s:${TAG}"
+          docker push "${ACCOUNT}.dkr.ecr.ap-northeast-2.amazonaws.com/my-community-prod-backend-k8s:${TAG}"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: revenantonthemission/2-cho-community-infra
+          token: ${{ secrets.INFRA_REPO_PAT }}
+          path: infra
+
+      - uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+        with:
+          kustomize-version: "5.4.3"
+
+      - name: Update prod image tag
+        working-directory: infra/k8s/overlays/prod
+        env:
+          REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-2.amazonaws.com
+          TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          kustomize edit set image \
+            "community-backend=${REGISTRY}/my-community-prod-backend-k8s:${TAG}"
+
+      - name: Commit and push
+        working-directory: infra
+        env:
+          TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/overlays/prod/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 스킵"
+            exit 0
+          fi
+          git commit -m "deploy(prod): backend → ${TAG} [skip ci]"
+          PUSHED=false
+          for i in 1 2 3; do
+            if git push origin main; then PUSHED=true; break; fi
+            git pull --rebase origin main
+          done
+          if [ "${PUSHED}" = "false" ]; then
+            echo "::error::Push 실패"; exit 1
+          fi
+
+  smoke-prod:
+    name: "Smoke Test (Prod)"
+    needs: deploy-prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ArgoCD sync
+        run: sleep 90
+
+      - name: Verify prod endpoints
+        env:
+          API_URL: "https://api.my-community.shop"
+          FE_URL: "https://my-community.shop"
+        run: |
+          for url in "${API_URL}/health" "${API_URL}/v1/posts/" "${FE_URL}"; do
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "$url")
+            if [ "$STATUS" != "200" ]; then
+              echo "::error::${url} returned HTTP ${STATUS}"
+              exit 1
+            fi
+            echo "${url}: OK"
+          done
