@@ -3,7 +3,7 @@
 from fastapi import HTTPException, Request, status
 
 from dependencies.request_context import get_request_timestamp
-from models.wiki_models import ALLOWED_SORT_OPTIONS
+from models.wiki_models import ALLOWED_SORT_OPTIONS, get_popular_wiki_tags
 from models.user_models import User
 from schemas.common import create_response
 from schemas.wiki_schemas import CreateWikiPageRequest, UpdateWikiPageRequest
@@ -58,6 +58,18 @@ async def get_wiki_pages(
         "WIKI_PAGES_RETRIEVED",
         "위키 페이지 목록 조회에 성공했습니다.",
         data=result,
+        timestamp=timestamp,
+    )
+
+
+async def get_wiki_popular_tags(request: Request, limit: int = 10) -> dict:
+    """위키에서 가장 많이 사용된 태그를 조회합니다."""
+    timestamp = get_request_timestamp(request)
+    tags = await get_popular_wiki_tags(limit=limit)
+    return create_response(
+        "WIKI_TAGS_RETRIEVED",
+        "위키 인기 태그 조회에 성공했습니다.",
+        data={"tags": tags},
         timestamp=timestamp,
     )
 

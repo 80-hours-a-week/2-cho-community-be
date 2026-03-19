@@ -60,6 +60,16 @@ async def create_wiki_page(
     return await wiki_controller.create_wiki_page(data, current_user, request)
 
 
+@wiki_router.get("/tags/popular", status_code=status.HTTP_200_OK)
+async def get_wiki_popular_tags(
+    request: Request,
+    limit: int = Query(10, ge=1, le=50, description="반환할 태그 수"),
+    _current_user: User | None = Depends(get_optional_user),
+) -> dict:
+    """위키에서 가장 많이 사용된 인기 태그를 조회합니다."""
+    return await wiki_controller.get_wiki_popular_tags(request, limit=limit)
+
+
 @wiki_router.get("/{slug}", status_code=status.HTTP_200_OK)
 async def get_wiki_page(
     request: Request,
