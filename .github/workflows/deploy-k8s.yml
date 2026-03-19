@@ -130,3 +130,46 @@ jobs:
             echo "::error::3회 push 모두 실패 — infra repo 업데이트 불가"
             exit 1
           fi
+
+  smoke-test:
+    name: "Smoke Test"
+    needs: update-image-tag
+    if: inputs.environment == 'prod'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ArgoCD sync
+        run: sleep 90
+
+      - name: Verify health endpoint
+        env:
+          API_URL: "https://api.my-community.shop"
+        run: |
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "${API_URL}/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check failed: HTTP ${STATUS}"
+            exit 1
+          fi
+          BODY=$(curl -sk "${API_URL}/health")
+          echo "Health response: ${BODY}"
+
+      - name: Verify API endpoints
+        env:
+          API_URL: "https://api.my-community.shop"
+        run: |
+          for path in "/v1/posts/" "/v1/categories/"; do
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "${API_URL}${path}")
+            if [ "$STATUS" != "200" ]; then
+              echo "::error::${path} returned HTTP ${STATUS}"
+              exit 1
+            fi
+            echo "${path}: OK (${STATUS})"
+          done
+
+      - name: Verify frontend
+        run: |
+          STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "https://my-community.shop")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Frontend returned HTTP ${STATUS}"
+            exit 1
+          fi
+          echo "Frontend: OK"
