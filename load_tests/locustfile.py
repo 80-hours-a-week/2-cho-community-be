@@ -1,12 +1,12 @@
 """locustfile.py: 커뮤니티 포럼 백엔드 부하 테스트.
 
-대상: AWS 배포 환경 (API Gateway → Lambda → RDS MySQL)
+대상: AWS EKS (NLB → Ingress → FastAPI Pod ×2~4, HPA 70% CPU)
 도구: Locust (Python)
 규모: 동시 50-200명
 
 사전 준비:
     1. uv pip install locust
-    2. seed_data.py로 테스트 계정이 대상 DB에 존재해야 합니다.
+    2. seed_accounts.py로 테스트 계정이 대상 DB에 존재해야 합니다.
        (user1@example.com ~ user250@example.com / Test1234!)
 
 실행:
@@ -26,12 +26,11 @@
     locust -f load_tests/locustfile.py --host=http://127.0.0.1:8000 ReaderUser
 
 주의사항:
-    - Rate Limiter: Lambda 인스턴스마다 독립적인 인메모리 카운터 사용
-      → 여러 인스턴스에 분산되면 실제 제한보다 관대하게 적용됨
+    - Rate Limiter: Pod마다 독립적인 인메모리 카운터 사용
+      → Pod 수가 늘어나면 실질 제한이 관대해짐 (HPA 스케일링 시)
     - Access Token 30분 만료: 테스트를 30분 이내로 제한하거나
       만료 후 401 비율 증가를 감안하여 결과를 분석하세요
-    - 첫 30초는 Lambda 콜드 스타트 워밍업 구간입니다.
-      P99 분석 시 이 구간을 제외하는 것을 권장합니다.
+    - EKS는 콜드 스타트 없음: 워밍업 구간 불필요
 """
 
 import logging
@@ -238,10 +237,11 @@ class CommunityUser(HttpUser):
 
         title = random.choice(POST_TITLES)
         content = random.choice(POST_CONTENTS) + f" ({random.randint(1000, 9999)})"
+        category_id = random.choice([1, 2, 3, 4, 5])
 
         with self.client.post(
             "/v1/posts/",
-            json={"title": title, "content": content},
+            json={"title": title, "content": content, "category_id": category_id},
             headers=self._auth_headers(),
             timeout=REQUEST_TIMEOUT,
             catch_response=True,
