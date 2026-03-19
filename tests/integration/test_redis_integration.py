@@ -8,12 +8,15 @@ import asyncio
 import os
 
 import pytest
-
-redis_mod = pytest.importorskip("redis", reason="redis 패키지 필요")
 import redis.asyncio as aioredis
 
+pytest.importorskip("redis", reason="redis 패키지 필요")
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379")
-_NEW = lambda: aioredis.from_url(REDIS_URL, decode_responses=True)
+
+
+def _NEW() -> aioredis.Redis:
+    return aioredis.from_url(REDIS_URL, decode_responses=True)
 
 
 async def _can_connect() -> bool:
