@@ -1,3 +1,6 @@
+-- UTF-8 한국어 데이터 정상 삽입을 위한 클라이언트 인코딩 설정
+SET NAMES utf8mb4;
+
 -- 유저 테이블
 CREATE TABLE user (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
