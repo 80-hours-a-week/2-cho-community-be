@@ -1,6 +1,6 @@
 """report_controller: 신고 관련 컨트롤러 모듈."""
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 from pymysql.err import IntegrityError
 
 from dependencies.request_context import get_request_timestamp
@@ -10,6 +10,7 @@ from schemas.report_schemas import CreateReportRequest, ResolveReportRequest
 from services.report_service import ReportService
 from utils.error_codes import ErrorCode
 from utils.exceptions import conflict_error
+from utils.pagination import validate_pagination
 
 
 async def create_report(
@@ -52,18 +53,8 @@ async def get_reports(
     timestamp = get_request_timestamp(request)
 
     # 페이지네이션 파라미터를 컨트롤러에서 직접 검증 — 서비스 레이어에 무효값이 도달하기 전에 차단
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_offset", "timestamp": timestamp},
-        )
-
     # limit 상한(100)은 한 번에 지나치게 많은 신고를 로드해 관리자 UI가 느려지는 것을 방지
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_limit", "timestamp": timestamp},
-        )
+    validate_pagination(offset, limit, timestamp)
 
     reports_data, total_count, has_more = await ReportService.get_reports(
         status=report_status,

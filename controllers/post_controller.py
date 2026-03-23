@@ -7,6 +7,7 @@ from schemas.common import create_response
 from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from services.post_service import PostService
 from utils.exceptions import not_found_error
+from utils.pagination import validate_pagination
 from utils.upload import save_file
 
 # ============ 게시글 관련 핸들러 ============
@@ -44,26 +45,8 @@ async def get_posts(
     timestamp = get_request_timestamp(request)
 
     # DB에서 음수 offset을 허용하면 의도치 않은 범위 조회가 발생할 수 있어 Controller에서 선제 차단
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
     # 상한선(100) 없이 허용하면 단일 요청으로 대량 데이터를 조회하는 남용을 막기 어려움
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    validate_pagination(offset, limit, timestamp)
 
     # 공백만 있는 검색어는 None으로 정규화 — SQL LIKE '%  %' 같은 무의미한 쿼리 방지
     if search is not None:

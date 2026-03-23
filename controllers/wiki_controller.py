@@ -1,6 +1,6 @@
 """wiki_controller: 위키 페이지 관련 컨트롤러."""
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 
 from dependencies.request_context import get_request_timestamp
 from models.user_models import User
@@ -8,6 +8,7 @@ from models.wiki_models import ALLOWED_SORT_OPTIONS, get_popular_wiki_tags
 from schemas.common import create_response
 from schemas.wiki_schemas import CreateWikiPageRequest, UpdateWikiPageRequest
 from services.wiki_service import WikiService
+from utils.pagination import validate_pagination
 
 
 async def get_wiki_pages(
@@ -22,25 +23,7 @@ async def get_wiki_pages(
     timestamp = get_request_timestamp(request)
 
     # 음수 offset은 유효하지 않으므로 Service 호출 전에 빠르게 거절
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    validate_pagination(offset, limit, timestamp)
 
     # 공백만 있는 검색어는 None으로 정규화
     if search is not None:

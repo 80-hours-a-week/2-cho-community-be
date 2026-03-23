@@ -86,6 +86,30 @@ async def create_notification(
             )
 
 
+async def create_notifications_bulk(
+    rows: list[tuple[int, str, int | None, int | None, int]],
+) -> None:
+    """여러 알림을 단일 INSERT로 일괄 생성합니다.
+
+    Args:
+        rows: (user_id, type, post_id, comment_id, actor_id) 튜플 목록.
+              음소거 필터링은 호출부에서 사전 처리해야 합니다.
+    """
+    if not rows:
+        return
+
+    placeholders = ", ".join(["(%s, %s, %s, %s, %s)"] * len(rows))
+    params: list = []
+    for row in rows:
+        params.extend(row)
+
+    async with transactional() as cur:
+        await cur.execute(
+            f"INSERT INTO notification (user_id, type, post_id, comment_id, actor_id) VALUES {placeholders}",
+            params,
+        )
+
+
 async def get_notifications(user_id: int, offset: int = 0, limit: int = 20) -> tuple[list[dict], int]:
     """사용자의 알림 목록과 총 개수를 반환합니다."""
     async with get_connection() as conn, conn.cursor() as cur:

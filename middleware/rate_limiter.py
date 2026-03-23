@@ -178,9 +178,13 @@ def get_client_ip(request: Request) -> str:
         return ips[0]
 
     # X-Real-IP 헤더 확인 (Nginx 등 일부 프록시가 사용)
+    # X-Forwarded-For와 동일하게 신뢰된 프록시 검증 후에만 수락한다.
+    # 신뢰된 프록시 목록이 없거나 직접 연결 IP가 신뢰된 프록시인 경우에만 허용한다.
     x_real_ip = request.headers.get("X-Real-IP")
     if x_real_ip:
-        return x_real_ip.strip()
+        direct_ip = request.client.host if request.client else None
+        if not trusted_proxies or (direct_ip and direct_ip in trusted_proxies):
+            return x_real_ip.strip()
 
     # 직접 연결된 클라이언트 IP
     if request.client and request.client.host:

@@ -587,19 +587,6 @@ async def unpin_post(post_id: int) -> bool:
         return cur.rowcount > 0
 
 
-async def update_post_category(post_id: int, category_id: int | None) -> bool:
-    """게시글 카테고리를 변경합니다."""
-    async with transactional() as cur:
-        await cur.execute(
-            """
-            UPDATE post SET category_id = %s
-            WHERE id = %s AND deleted_at IS NULL
-            """,
-            (category_id, post_id),
-        )
-        return cur.rowcount > 0
-
-
 # ============ 게시글 이미지 관련 함수 ============
 
 

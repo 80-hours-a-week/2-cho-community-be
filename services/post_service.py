@@ -6,7 +6,8 @@ from models import category_models, follow_models, notification_models, poll_mod
 from models.block_models import get_blocked_user_ids
 from models.bookmark_models import get_bookmark
 from models.like_models import get_like
-from models.user_models import User, get_user_by_nickname
+from models.notification_setting_models import get_notification_settings
+from models.user_models import User, get_users_by_nicknames
 from schemas.post_schemas import CreatePostRequest
 from schemas.responses.post_responses import PostListResult
 from utils.error_codes import ErrorCode
@@ -265,29 +266,31 @@ class PostService:
                 expires_at=post_data.poll.expires_at,
             )
 
-        # 팔로워에게 새 게시글 알림 (실패해도 게시글 생성은 유지)
+        # 팔로워에게 새 게시글 알림 — 벌크 INSERT로 N+1 방지 (실패해도 게시글 생성은 유지)
         try:
             follower_ids = await follow_models.get_follower_ids(user_id)
-            for follower_id in follower_ids:
-                await notification_models.create_notification(
-                    user_id=follower_id,
-                    notification_type="follow",
-                    post_id=post.id,
-                    actor_id=user_id,
-                    actor_nickname=actor_nickname,
-                )
+            if follower_ids:
+                # 자기 자신 제외 + 음소거 설정 일괄 조회 후 필터링
+                bulk_rows: list[tuple] = []
+                for follower_id in follower_ids:
+                    if follower_id == user_id:
+                        continue
+                    settings = await get_notification_settings(follower_id)
+                    if settings.get("follow", True):
+                        bulk_rows.append((follower_id, "follow", post.id, None, user_id))
+                await notification_models.create_notifications_bulk(bulk_rows)
         except Exception:
             logging.getLogger(__name__).warning("팔로우 알림 생성 실패", exc_info=True)
 
-        # 게시글 본문 멘션 알림 (자기 자신 제외는 create_notification 내부에서 처리)
+        # 게시글 본문 멘션 알림 — 닉네임 일괄 조회로 N+1 방지
         nicknames = extract_mentions(post_data.content)
-        for nickname in nicknames:
+        if nicknames:
             try:
-                mentioned_user = await get_user_by_nickname(nickname)
+                mentioned_users = await get_users_by_nicknames(list(nicknames))
             except Exception:
-                logging.getLogger(__name__).warning("멘션 사용자 조회 실패: %s", nickname, exc_info=True)
-                continue
-            if mentioned_user:
+                logging.getLogger(__name__).warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                mentioned_users = {}
+            for mentioned_user in mentioned_users.values():
                 await safe_notify(
                     user_id=mentioned_user.id,
                     notification_type="mention",
@@ -349,16 +352,16 @@ class PostService:
         )
         assert updated_post is not None  # 게시글 존재는 위에서 검증됨
 
-        # 6. 새로 추가된 멘션 알림
+        # 6. 새로 추가된 멘션 알림 — 닉네임 일괄 조회로 N+1 방지
         if content:
             new_mentions = set(extract_mentions(content)) - old_mentions
-            for nickname in new_mentions:
+            if new_mentions:
                 try:
-                    mentioned_user = await get_user_by_nickname(nickname)
+                    mentioned_users = await get_users_by_nicknames(list(new_mentions))
                 except Exception:
-                    logging.getLogger(__name__).warning("멘션 사용자 조회 실패: %s", nickname, exc_info=True)
-                    continue
-                if mentioned_user:
+                    logging.getLogger(__name__).warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                    mentioned_users = {}
+                for mentioned_user in mentioned_users.values():
                     await safe_notify(
                         user_id=mentioned_user.id,
                         notification_type="mention",

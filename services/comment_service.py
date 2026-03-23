@@ -3,7 +3,7 @@
 import logging
 
 from models import comment_models, post_models
-from models.user_models import get_user_by_nickname
+from models.user_models import get_users_by_nicknames
 from utils.error_codes import ErrorCode
 from utils.exceptions import bad_request_error, forbidden_error, not_found_error, safe_notify
 from utils.mention import extract_mentions
@@ -136,15 +136,15 @@ class CommentService:
                     comment_id=comment.id,
                 )
 
-        # 멘션 알림 (자기 자신 제외는 create_notification 내부에서 처리)
+        # 멘션 알림 — 닉네임 일괄 조회로 N+1 방지 (자기 자신 제외는 create_notification 내부에서 처리)
         nicknames = extract_mentions(content)
-        for nickname in nicknames:
+        if nicknames:
             try:
-                mentioned_user = await get_user_by_nickname(nickname)
+                mentioned_users = await get_users_by_nicknames(list(nicknames))
             except Exception:
-                logger.warning("멘션 사용자 조회 실패: %s", nickname, exc_info=True)
-                continue
-            if mentioned_user:
+                logger.warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                mentioned_users = {}
+            for mentioned_user in mentioned_users.values():
                 await safe_notify(
                     user_id=mentioned_user.id,
                     notification_type="mention",
@@ -203,15 +203,15 @@ class CommentService:
         )
         assert updated_comment is not None  # 댓글 존재는 위에서 검증됨
 
-        # 새로 추가된 멘션에 대해서만 알림
+        # 새로 추가된 멘션에 대해서만 알림 — 닉네임 일괄 조회로 N+1 방지
         new_mentions = set(extract_mentions(content)) - old_mentions
-        for nickname in new_mentions:
+        if new_mentions:
             try:
-                mentioned_user = await get_user_by_nickname(nickname)
+                mentioned_users = await get_users_by_nicknames(list(new_mentions))
             except Exception:
-                logger.warning("멘션 사용자 조회 실패: %s", nickname, exc_info=True)
-                continue
-            if mentioned_user:
+                logger.warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                mentioned_users = {}
+            for mentioned_user in mentioned_users.values():
                 await safe_notify(
                     user_id=mentioned_user.id,
                     notification_type="mention",

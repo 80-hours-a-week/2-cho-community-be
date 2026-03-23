@@ -202,6 +202,35 @@ async def get_user_by_nickname(nickname: str) -> User | None:
         return _row_to_user(row) if row else None
 
 
+async def get_users_by_nicknames(nicknames: list[str]) -> dict[str, "User"]:
+    """닉네임 목록으로 사용자를 일괄 조회합니다.
+
+    N+1 멘션 조회를 단일 IN 쿼리로 대체합니다.
+
+    Args:
+        nicknames: 조회할 닉네임 목록.
+
+    Returns:
+        닉네임 → User 객체 딕셔너리. 존재하지 않거나 탈퇴한 사용자는 포함되지 않습니다.
+    """
+    if not nicknames:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(nicknames))
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
+                SELECT {USER_SELECT_FIELDS}
+                FROM user
+                WHERE nickname IN ({placeholders}) AND deleted_at IS NULL
+                """,
+            nicknames,
+        )
+        rows = await cur.fetchall()
+
+    return {row[3]: _row_to_user(row) for row in rows}
+
+
 async def search_users_by_nickname(query: str, exclude_user_ids: set[int], limit: int = 10) -> list[dict]:
     """닉네임 접두어로 사용자 검색. 제외 ID set으로 자기 자신/차단 사용자 필터링."""
     if not query or not query.strip():

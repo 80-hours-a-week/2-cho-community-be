@@ -15,6 +15,7 @@ from schemas.package_schemas import (
     UpdateReviewRequest,
 )
 from services.package_service import PackageService
+from utils.pagination import validate_pagination
 
 # ============ 패키지 관련 핸들러 ============
 
@@ -31,26 +32,8 @@ async def get_packages(
     timestamp = get_request_timestamp(request)
 
     # 음수 offset은 DB 레벨에서도 거부되지만 명확한 에러 메시지를 위해 Controller에서 먼저 검사
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
     # 상한선(100)을 두어 단일 요청으로 과도한 데이터를 조회하는 것을 방지
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    validate_pagination(offset, limit, timestamp)
 
     # 공백만 있는 검색어는 None으로 정규화
     if search is not None:
@@ -154,25 +137,7 @@ async def get_reviews(
     """패키지 리뷰 목록을 조회합니다."""
     timestamp = get_request_timestamp(request)
 
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    validate_pagination(offset, limit, timestamp)
 
     # 리뷰 정렬 옵션은 패키지 목록과 별도로 관리 — 리뷰에는 '평점순' 등 추가 옵션이 있을 수 있음
     if sort not in ALLOWED_REVIEW_SORT_OPTIONS:
