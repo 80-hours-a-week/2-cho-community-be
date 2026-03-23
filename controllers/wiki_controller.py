@@ -1,13 +1,14 @@
 """wiki_controller: 위키 페이지 관련 컨트롤러."""
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 
 from dependencies.request_context import get_request_timestamp
-from models.wiki_models import ALLOWED_SORT_OPTIONS, get_popular_wiki_tags
 from models.user_models import User
+from models.wiki_models import ALLOWED_SORT_OPTIONS, get_popular_wiki_tags
 from schemas.common import create_response
 from schemas.wiki_schemas import CreateWikiPageRequest, UpdateWikiPageRequest
 from services.wiki_service import WikiService
+from utils.pagination import validate_pagination
 
 
 async def get_wiki_pages(
@@ -21,37 +22,23 @@ async def get_wiki_pages(
     """위키 페이지 목록을 조회합니다."""
     timestamp = get_request_timestamp(request)
 
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    # 음수 offset은 유효하지 않으므로 Service 호출 전에 빠르게 거절
+    validate_pagination(offset, limit, timestamp)
 
     # 공백만 있는 검색어는 None으로 정규화
     if search is not None:
         search = search.strip() or None
 
-    # 유효하지 않은 정렬 옵션은 기본값으로 대체
+    # 잘못된 정렬값은 400 에러 대신 기본값으로 폴백 — 파라미터 오타에 관용적으로 대응
     if sort not in ALLOWED_SORT_OPTIONS:
         sort = "latest"
 
     result = await WikiService.get_wiki_pages(
-        offset=offset, limit=limit, sort=sort,
-        search=search, tag=tag,
+        offset=offset,
+        limit=limit,
+        sort=sort,
+        search=search,
+        tag=tag,
     )
 
     return create_response(
@@ -65,6 +52,7 @@ async def get_wiki_pages(
 async def get_wiki_popular_tags(request: Request, limit: int = 10) -> dict:
     """위키에서 가장 많이 사용된 태그를 조회합니다."""
     timestamp = get_request_timestamp(request)
+    # 집계 쿼리가 단순하여 Service 계층 없이 Model을 직접 호출
     tags = await get_popular_wiki_tags(limit=limit)
     return create_response(
         "WIKI_TAGS_RETRIEVED",
@@ -81,6 +69,7 @@ async def get_wiki_page(
     """위키 페이지 상세 정보를 조회합니다."""
     timestamp = get_request_timestamp(request)
 
+    # slug는 URL-friendly 식별자 — ID 대신 사용해 북마크 가능한 고정 URL 유지
     result = await WikiService.get_wiki_page(slug, timestamp)
 
     return create_response(
@@ -100,9 +89,12 @@ async def create_wiki_page(
     timestamp = get_request_timestamp(request)
 
     wiki_page_id = await WikiService.create_wiki_page(
-        current_user.id, data, timestamp,
+        current_user.id,
+        data,
+        timestamp,
     )
 
+    # slug를 응답에 포함 — 생성 직후 클라이언트가 /wiki/{slug}로 바로 이동할 수 있도록
     return create_response(
         "WIKI_PAGE_CREATED",
         "위키 페이지가 생성되었습니다.",
@@ -121,7 +113,10 @@ async def update_wiki_page(
     timestamp = get_request_timestamp(request)
 
     result = await WikiService.update_wiki_page(
-        slug, current_user.id, data, timestamp,
+        slug,
+        current_user.id,
+        data,
+        timestamp,
     )
 
     return create_response(
@@ -140,9 +135,12 @@ async def delete_wiki_page(
     """위키 페이지를 삭제합니다."""
     timestamp = get_request_timestamp(request)
 
+    # 관리자는 타인의 위키 페이지도 삭제 가능 — 품질 관리 및 규정 위반 콘텐츠 제거 목적
     await WikiService.delete_wiki_page(
-        slug, current_user.id,
-        is_admin=current_user.is_admin, timestamp=timestamp,
+        slug,
+        current_user.id,
+        is_admin=current_user.is_admin,
+        timestamp=timestamp,
     )
 
     return create_response(

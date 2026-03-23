@@ -6,7 +6,7 @@
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from database.connection import get_connection, transactional
 
@@ -17,7 +17,7 @@ def generate_temp_nickname() -> str:
 
 
 # SQL Injection 방지: 허용된 컬럼명 whitelist
-ALLOWED_USER_COLUMNS = {'nickname', 'profile_img', 'distro'}
+ALLOWED_USER_COLUMNS = {"nickname", "profile_img", "distro"}
 
 
 @dataclass(frozen=True)
@@ -69,8 +69,8 @@ class User:
         # MySQL TIMESTAMP는 timezone-naive로 반환될 수 있으므로 UTC 기준 비교
         suspended = self.suspended_until
         if suspended.tzinfo is None:
-            suspended = suspended.replace(tzinfo=timezone.utc)
-        return suspended > datetime.now(timezone.utc)
+            suspended = suspended.replace(tzinfo=UTC)
+        return suspended > datetime.now(UTC)
 
     @property
     def profileImageUrl(self) -> str:
@@ -123,18 +123,17 @@ async def get_user_by_id(user_id: int) -> User | None:
     Returns:
         사용자 객체, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"""
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
                 SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE id = %s AND deleted_at IS NULL
                 """,
-                (user_id,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 async def get_user_by_email(email: str) -> User | None:
@@ -146,18 +145,17 @@ async def get_user_by_email(email: str) -> User | None:
     Returns:
         사용자 객체, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"""
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
                 SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE email = %s AND deleted_at IS NULL
                 """,
-                (email,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+            (email,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 async def get_deleted_user_by_email(email: str) -> User | None:
@@ -169,18 +167,17 @@ async def get_deleted_user_by_email(email: str) -> User | None:
     Returns:
         사용자 객체, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"""
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
                 SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE email = %s AND deleted_at IS NOT NULL
                 """,
-                (email,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+            (email,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 async def get_user_by_nickname(nickname: str) -> User | None:
@@ -192,51 +189,77 @@ async def get_user_by_nickname(nickname: str) -> User | None:
     Returns:
         사용자 객체, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"""
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
                 SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NULL
                 """,
-                (nickname,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+            (nickname,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
-async def search_users_by_nickname(
-    query: str, exclude_user_ids: set[int], limit: int = 10
-) -> list[dict]:
+async def get_users_by_nicknames(nicknames: list[str]) -> dict[str, "User"]:
+    """닉네임 목록으로 사용자를 일괄 조회합니다.
+
+    N+1 멘션 조회를 단일 IN 쿼리로 대체합니다.
+
+    Args:
+        nicknames: 조회할 닉네임 목록.
+
+    Returns:
+        닉네임 → User 객체 딕셔너리. 존재하지 않거나 탈퇴한 사용자는 포함되지 않습니다.
+    """
+    if not nicknames:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(nicknames))
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
+                SELECT {USER_SELECT_FIELDS}
+                FROM user
+                WHERE nickname IN ({placeholders}) AND deleted_at IS NULL
+                """,
+            nicknames,
+        )
+        rows = await cur.fetchall()
+
+    return {row[3]: _row_to_user(row) for row in rows}
+
+
+async def search_users_by_nickname(query: str, exclude_user_ids: set[int], limit: int = 10) -> list[dict]:
     """닉네임 접두어로 사용자 검색. 제외 ID set으로 자기 자신/차단 사용자 필터링."""
     if not query or not query.strip():
         return []
 
     query = query.strip()
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            if exclude_user_ids:
-                placeholders = ",".join(["%s"] * len(exclude_user_ids))
-                sql = (
-                    f"SELECT id, nickname, profile_img FROM user "
-                    f"WHERE nickname LIKE %s AND deleted_at IS NULL "
-                    f"AND id NOT IN ({placeholders}) "
-                    f"ORDER BY nickname LIMIT %s"
-                )
-                params = [f"{query}%", *exclude_user_ids, limit]
-            else:
-                sql = (
-                    "SELECT id, nickname, profile_img FROM user "
-                    "WHERE nickname LIKE %s AND deleted_at IS NULL "
-                    "ORDER BY nickname LIMIT %s"
-                )
-                params = [f"{query}%", limit]
+    async with get_connection() as conn, conn.cursor() as cur:
+        if exclude_user_ids:
+            placeholders = ",".join(["%s"] * len(exclude_user_ids))
+            sql = (
+                f"SELECT id, nickname, profile_img FROM user "
+                f"WHERE nickname LIKE %s AND deleted_at IS NULL "
+                f"AND id NOT IN ({placeholders}) "
+                f"ORDER BY nickname LIMIT %s"
+            )
+            params = [f"{query}%", *exclude_user_ids, limit]
+        else:
+            sql = (
+                "SELECT id, nickname, profile_img FROM user "
+                "WHERE nickname LIKE %s AND deleted_at IS NULL "
+                "ORDER BY nickname LIMIT %s"
+            )
+            params = [f"{query}%", limit]
 
-            await cur.execute(sql, params)
-            rows = await cur.fetchall()
+        await cur.execute(sql, params)
+        rows = await cur.fetchall()
 
     from schemas.common import DEFAULT_PROFILE_IMAGE
+
     return [
         {
             "user_id": row[0],
@@ -248,36 +271,32 @@ async def search_users_by_nickname(
 
 
 async def get_user_stats(user_id: int) -> dict:
-    """사용자 활동 통계 조회 (게시글 수, 댓글 수, 받은 좋아요 수)."""
-    async with get_connection() as conn:
-        async with conn.cursor() as cur_posts:
-            await cur_posts.execute(
-                "SELECT COUNT(*) FROM post WHERE author_id = %s AND deleted_at IS NULL",
-                (user_id,),
-            )
-            posts_row = await cur_posts.fetchone()
+    """사용자 활동 통계 조회 (게시글 수, 댓글 수, 받은 좋아요 수).
 
-        async with conn.cursor() as cur_comments:
-            await cur_comments.execute(
-                "SELECT COUNT(*) FROM comment WHERE author_id = %s AND deleted_at IS NULL",
-                (user_id,),
-            )
-            comments_row = await cur_comments.fetchone()
+    3개의 COUNT 쿼리를 단일 쿼리로 합쳐 DB 왕복 횟수를 줄입니다.
+    """
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM post WHERE author_id = %s AND deleted_at IS NULL) AS posts_count,
+                (SELECT COUNT(*) FROM comment WHERE author_id = %s AND deleted_at IS NULL) AS comments_count,
+                (SELECT COUNT(*)
+                 FROM post_like pl
+                 JOIN post p ON pl.post_id = p.id
+                 WHERE p.author_id = %s AND p.deleted_at IS NULL) AS likes_received_count
+            """,
+            (user_id, user_id, user_id),
+        )
+        row = await cur.fetchone()
 
-        async with conn.cursor() as cur_likes:
-            await cur_likes.execute(
-                "SELECT COUNT(*) FROM post_like pl "
-                "JOIN post p ON pl.post_id = p.id "
-                "WHERE p.author_id = %s AND p.deleted_at IS NULL",
-                (user_id,),
-            )
-            likes_row = await cur_likes.fetchone()
-
-    return {
-        "posts_count": posts_row[0] if posts_row else 0,
-        "comments_count": comments_row[0] if comments_row else 0,
-        "likes_received_count": likes_row[0] if likes_row else 0,
-    }
+    if row:
+        return {
+            "posts_count": row[0],
+            "comments_count": row[1],
+            "likes_received_count": row[2],
+        }
+    return {"posts_count": 0, "comments_count": 0, "likes_received_count": 0}
 
 
 async def get_user_email_by_nickname(nickname: str) -> str | None:
@@ -291,18 +310,17 @@ async def get_user_email_by_nickname(nickname: str) -> str | None:
     Returns:
         사용자 이메일 주소, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            """
                 SELECT email
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NULL
                 """,
-                (nickname,),
-            )
-            row = await cur.fetchone()
-            return row[0] if row else None
+            (nickname,),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None
 
 
 async def get_deleted_user_by_nickname(nickname: str) -> User | None:
@@ -314,18 +332,17 @@ async def get_deleted_user_by_nickname(nickname: str) -> User | None:
     Returns:
         사용자 객체, 없으면 None.
     """
-    async with get_connection() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"""
+    async with get_connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            f"""
                 SELECT {USER_SELECT_FIELDS}
                 FROM user
                 WHERE nickname = %s AND deleted_at IS NOT NULL
                 """,
-                (nickname,),
-            )
-            row = await cur.fetchone()
-            return _row_to_user(row) if row else None
+            (nickname,),
+        )
+        row = await cur.fetchone()
+        return _row_to_user(row) if row else None
 
 
 async def add_user(
@@ -398,7 +415,7 @@ async def update_user(
         updates.append("profile_img = %s")
         params.append(profile_image_url)
     if distro is not None:
-        if distro == '':
+        if distro == "":
             updates.append("distro = NULL")
         else:
             updates.append("distro = %s")
@@ -409,7 +426,7 @@ async def update_user(
 
     # SQL Injection 방지: 컬럼명 검증
     for update_clause in updates:
-        column_name = update_clause.split(' = ')[0]
+        column_name = update_clause.split(" = ")[0]
         if column_name not in ALLOWED_USER_COLUMNS:
             raise ValueError(f"Invalid column name: {column_name}")
 
@@ -493,9 +510,7 @@ def _generate_anonymized_user_data() -> tuple[str, str]:
     return anonymized_email, anonymized_nickname
 
 
-async def _disconnect_and_anonymize_user(
-    cur, user_id: int, *, set_deleted_at: bool = False
-) -> User | None:
+async def _disconnect_and_anonymize_user(cur, user_id: int, *, set_deleted_at: bool = False) -> User | None:
     """사용자의 연결을 끊고 익명화하는 공통 로직.
 
     게시글/댓글의 author_id를 NULL로 설정하고, 리프레시 토큰을 삭제하며,
@@ -597,9 +612,7 @@ async def update_nickname_set(user_id: int, nickname: str) -> User | None:
         )
         if cur.rowcount == 0:
             return None
-        await cur.execute(
-            f"SELECT {USER_SELECT_FIELDS} FROM user WHERE id = %s", (user_id,)
-        )
+        await cur.execute(f"SELECT {USER_SELECT_FIELDS} FROM user WHERE id = %s", (user_id,))
         row = await cur.fetchone()
         return _row_to_user(row) if row else None
 
@@ -675,7 +688,7 @@ async def register_user(
                     return await add_user(email, password, nickname, profile_image_url)
                 except IntegrityError:
                     # cleanup과 add_user 사이에 동시 요청이 선점한 경우
-                    raise IntegrityError(1062, f"Duplicate entry for email='{email}'")
+                    raise IntegrityError(1062, f"Duplicate entry for email='{email}'") from None
 
             # 2. 닉네임이 탈퇴한 사용자의 것인지 확인
             deleted_user_nick = await get_deleted_user_by_nickname(nickname)
@@ -685,9 +698,7 @@ async def register_user(
                     return await add_user(email, password, nickname, profile_image_url)
                 except IntegrityError:
                     # cleanup과 add_user 사이에 동시 요청이 선점한 경우
-                    raise IntegrityError(
-                        1062, f"Duplicate entry for nickname='{nickname}'"
-                    )
+                    raise IntegrityError(1062, f"Duplicate entry for nickname='{nickname}'") from None
 
         # 좀비 사용자가 아니거나 다른 IntegrityError
         raise e

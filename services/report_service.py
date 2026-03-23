@@ -1,12 +1,11 @@
 """report_service: 신고 관련 비즈니스 로직을 처리하는 서비스."""
 
 import logging
-from typing import Dict, List, Optional, Tuple
 
-from models import report_models, post_models, comment_models, suspension_models
-from utils.formatters import format_datetime
+from models import comment_models, post_models, report_models, suspension_models, user_models
 from utils.error_codes import ErrorCode
-from utils.exceptions import not_found_error, bad_request_error
+from utils.exceptions import bad_request_error, not_found_error
+from utils.formatters import format_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +19,9 @@ class ReportService:
         target_type: str,
         target_id: int,
         reason: str,
-        description: Optional[str],
+        description: str | None,
         timestamp: str,
-    ) -> Dict:
+    ) -> dict:
         """신고를 생성합니다."""
         # 1. 대상 존재 확인 + 자기 콘텐츠 신고 방지
         if target_type == "post":
@@ -65,13 +64,15 @@ class ReportService:
 
     @staticmethod
     async def get_reports(
-        status: Optional[str],
+        status: str | None,
         offset: int,
         limit: int,
-    ) -> Tuple[List[Dict], int, bool]:
+    ) -> tuple[list[dict], int, bool]:
         """신고 목록 조회 및 가공."""
         reports_data = await report_models.get_reports(
-            status=status, offset=offset, limit=limit,
+            status=status,
+            offset=offset,
+            limit=limit,
         )
         total_count = await report_models.get_reports_count(status=status)
         has_more = offset + limit < total_count
@@ -89,7 +90,7 @@ class ReportService:
         new_status: str,
         timestamp: str,
         suspend_days: int | None = None,
-    ) -> Dict:
+    ) -> dict:
         """신고를 처리합니다.
 
         resolved: 대상 콘텐츠를 soft delete합니다.
@@ -131,20 +132,50 @@ class ReportService:
             # 작성자 정지 (관리자 지정 시)
             # NOTE: 콘텐츠 삭제와 정지는 별도 트랜잭션. 정지 실패 시 로그 기록
             if suspend_days and author_id:
-                reason = f"신고 처리에 의한 정지 (신고 #{report_id}: {report.reason})"
-                suspended = await suspension_models.suspend_user(
-                    user_id=author_id,
-                    duration_days=suspend_days,
-                    reason=reason,
-                )
-                if not suspended:
-                    logger.warning(
-                        "신고 #%d 처리 중 사용자 %d 정지 실패 (이미 탈퇴했을 수 있음)",
-                        report_id, author_id,
+                author = await user_models.get_user_by_id(author_id)
+                if author and author.is_admin:
+                    # 관리자 계정은 신고 처리로 정지 불가
+                    logger.warning("관리자 계정은 신고 처리로 정지 불가: user_id=%s", author_id)
+                else:
+                    reason = f"신고 처리에 의한 정지 (신고 #{report_id}: {report.reason})"
+                    suspended = await suspension_models.suspend_user(
+                        user_id=author_id,
+                        duration_days=suspend_days,
+                        reason=reason,
                     )
+                    if not suspended:
+                        logger.warning(
+                            "신고 #%d 처리 중 사용자 %d 정지 실패 (이미 탈퇴했을 수 있음)",
+                            report_id,
+                            author_id,
+                        )
 
         return {
             "report_id": resolved.id,
             "status": resolved.status,
             "resolved_by": resolved.resolved_by,
+        }
+
+    @staticmethod
+    async def reopen_report(report_id: int, timestamp: str) -> dict:
+        """처리된 신고를 다시 pending 상태로 되돌립니다."""
+        report = await report_models.get_report_by_id(report_id)
+        if not report:
+            raise not_found_error("report", timestamp)
+
+        # 이미 pending인 신고는 re-open 불필요
+        if report.status == "pending":
+            raise bad_request_error(
+                ErrorCode.ALREADY_PROCESSED,
+                timestamp,
+                "이미 대기 중인 신고입니다.",
+            )
+
+        reopened = await report_models.reopen_report(report_id)
+        if not reopened:
+            raise not_found_error("report", timestamp)
+
+        return {
+            "report_id": reopened.id,
+            "status": reopened.status,
         }

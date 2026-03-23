@@ -1,13 +1,14 @@
 from fastapi import HTTPException, Request, UploadFile, status
+
+from dependencies.request_context import get_request_timestamp
 from models.post_models import ALLOWED_SORT_OPTIONS
 from models.user_models import User
-from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from schemas.common import create_response
-from dependencies.request_context import get_request_timestamp
-from utils.upload import save_file
-from utils.exceptions import not_found_error
+from schemas.post_schemas import CreatePostRequest, UpdatePostRequest
 from services.post_service import PostService
-
+from utils.exceptions import not_found_error
+from utils.pagination import validate_pagination
+from utils.upload import save_file
 
 # ============ 게시글 관련 핸들러 ============
 
@@ -43,39 +44,28 @@ async def get_posts(
     """
     timestamp = get_request_timestamp(request)
 
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    # DB에서 음수 offset을 허용하면 의도치 않은 범위 조회가 발생할 수 있어 Controller에서 선제 차단
+    # 상한선(100) 없이 허용하면 단일 요청으로 대량 데이터를 조회하는 남용을 막기 어려움
+    validate_pagination(offset, limit, timestamp)
 
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    # 공백만 있는 검색어는 None으로 정규화
+    # 공백만 있는 검색어는 None으로 정규화 — SQL LIKE '%  %' 같은 무의미한 쿼리 방지
     if search is not None:
         search = search.strip() or None
 
-    # 유효하지 않은 정렬 옵션은 기본값으로 대체
+    # 클라이언트가 잘못된 정렬값을 보내도 400 대신 기본값으로 폴백 — UX 관용성 유지
     if sort not in ALLOWED_SORT_OPTIONS:
         sort = "latest"
 
     # Service Layer 호출
     result = await PostService.get_posts(
-        offset, limit, search=search, sort=sort,
-        author_id=author_id, category_id=category_id,
-        current_user=current_user, tag=tag,
+        offset,
+        limit,
+        search=search,
+        sort=sort,
+        author_id=author_id,
+        category_id=category_id,
+        current_user=current_user,
+        tag=tag,
         following=following,
     )
 
@@ -89,7 +79,8 @@ async def get_posts(
         },
     }
 
-    # 추천 피드 폴백 시 실제 적용된 정렬 방식 전달
+    # 추천 피드(following=True)에서 팔로우 중인 사용자가 없으면 최신순으로 폴백하는데,
+    # 클라이언트가 실제로 어떤 정렬로 응답받았는지 알아야 UI를 올바르게 표시할 수 있음
     if result.effective_sort is not None:
         response_data["effective_sort"] = result.effective_sort
 
@@ -102,7 +93,9 @@ async def get_posts(
 
 
 async def get_post(
-    post_id: int, request: Request, current_user: User | None = None,
+    post_id: int,
+    request: Request,
+    current_user: User | None = None,
     comment_sort: str = "oldest",
 ) -> dict:
     """
@@ -121,6 +114,7 @@ async def get_post(
     """
     timestamp = get_request_timestamp(request)
 
+    # DB auto_increment는 1부터 시작하므로 0 이하는 존재할 수 없는 ID — Service 호출 전 빠른 거절
     if post_id < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -131,9 +125,7 @@ async def get_post(
         )
 
     # Service Layer 호출
-    result_data = await PostService.get_post_detail(
-        post_id, current_user, timestamp, comment_sort=comment_sort
-    )
+    result_data = await PostService.get_post_detail(post_id, current_user, timestamp, comment_sort=comment_sort)
 
     return create_response(
         "POST_RETRIEVED",
@@ -161,9 +153,11 @@ async def create_post(
     """
     timestamp = get_request_timestamp(request)
 
-    # Service Layer 호출
+    # is_admin과 actor_nickname을 함께 전달해 Service에서 공지 카테고리 권한 검사 및 알림 생성에 활용
     post_id = await PostService.create_post(
-        current_user.id, post_data, is_admin=current_user.is_admin,
+        current_user.id,
+        post_data,
+        is_admin=current_user.is_admin,
         actor_nickname=current_user.nickname,
     )
 
@@ -198,7 +192,7 @@ async def update_post(
     """
     timestamp = get_request_timestamp(request)
 
-    # Service Layer 호출
+    # actor_nickname은 수정 이력(audit log) 및 알림 메시지 생성에 사용됨
     updated_data = await PostService.update_post(
         post_id,
         current_user.id,
@@ -241,14 +235,16 @@ async def delete_post(
     """
     timestamp = get_request_timestamp(request)
 
-    # Service Layer 호출
+    # is_admin을 전달해 관리자가 타인 게시글도 삭제할 수 있도록 허용
+    # 실제 삭제는 soft delete(deleted_at 설정) 방식으로 처리됨
     await PostService.delete_post(
-        post_id, current_user.id, timestamp, is_admin=current_user.is_admin,
+        post_id,
+        current_user.id,
+        timestamp,
+        is_admin=current_user.is_admin,
     )
 
-    return create_response(
-        "POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp
-    )
+    return create_response("POST_DELETED", "게시글이 삭제되었습니다.", timestamp=timestamp)
 
 
 async def upload_image(
@@ -275,6 +271,8 @@ async def upload_image(
     try:
         url = await save_file(file, folder="posts")
     except HTTPException as e:
+        # save_file이 반환하는 HTTPException의 detail에 timestamp를 주입해
+        # 에러 응답 형식을 다른 엔드포인트와 일관되게 유지
         if isinstance(e.detail, dict):
             e.detail["timestamp"] = timestamp
         raise e
@@ -307,9 +305,12 @@ async def get_related_posts(
     timestamp = get_request_timestamp(request)
 
     posts = await PostService.get_related_posts(
-        post_id, current_user=current_user, limit=limit,
+        post_id,
+        current_user=current_user,
+        limit=limit,
     )
 
+    # 기준 게시글 자체가 존재하지 않으면 연관 게시글도 의미 없으므로 404 반환
     if posts is None:
         raise not_found_error("post", timestamp)
 
@@ -329,11 +330,10 @@ async def pin_post(
     """게시글을 고정합니다 (관리자 전용)."""
     timestamp = get_request_timestamp(request)
 
+    # 권한 검사는 라우터의 require_admin 의존성에서 처리 — 여기서는 비즈니스 로직만 위임
     await PostService.pin_post(post_id, timestamp)
 
-    return create_response(
-        "POST_PINNED", "게시글이 고정되었습니다.", timestamp=timestamp
-    )
+    return create_response("POST_PINNED", "게시글이 고정되었습니다.", timestamp=timestamp)
 
 
 async def unpin_post(
@@ -344,8 +344,7 @@ async def unpin_post(
     """게시글 고정을 해제합니다 (관리자 전용)."""
     timestamp = get_request_timestamp(request)
 
+    # 권한 검사는 라우터의 require_admin 의존성에서 처리 — 여기서는 비즈니스 로직만 위임
     await PostService.unpin_post(post_id, timestamp)
 
-    return create_response(
-        "POST_UNPINNED", "게시글 고정이 해제되었습니다.", timestamp=timestamp
-    )
+    return create_response("POST_UNPINNED", "게시글 고정이 해제되었습니다.", timestamp=timestamp)

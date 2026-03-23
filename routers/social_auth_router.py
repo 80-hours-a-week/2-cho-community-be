@@ -6,7 +6,7 @@
 import hashlib
 import hmac
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, Depends, Query, status
@@ -28,6 +28,17 @@ router = APIRouter(prefix="/v1/auth/social", tags=["social-auth"])
 _STATE_COOKIE = "social_state"
 _REFRESH_COOKIE = "refresh_token"
 
+# 액세스 토큰을 URL 노출 없이 전달하는 단기 쿠키.
+# HttpOnly=False: JS가 읽어서 메모리/localStorage에 저장 후 즉시 삭제해야 함.
+# max_age=60: 60초 내 JS가 읽지 않으면 자동 만료되어 노출 위험 최소화.
+_ACCESS_TOKEN_COOKIE = "access_token_temp"
+_ACCESS_TOKEN_COOKIE_MAX_AGE = 60
+
+
+def _hmac_sign(message: str) -> str:
+    """SECRET_KEY로 메시지의 HMAC-SHA256 서명을 생성합니다."""
+    return hmac.new(settings.SECRET_KEY.encode(), message.encode(), hashlib.sha256).hexdigest()
+
 
 def _make_state() -> tuple[str, str]:
     """HMAC 서명된 state 값을 생성합니다.
@@ -36,10 +47,7 @@ def _make_state() -> tuple[str, str]:
         (state_raw, full_state) 튜플. full_state = "raw:sig".
     """
     state_raw = uuid4().hex
-    state_sig = hmac.new(
-        settings.SECRET_KEY.encode(), state_raw.encode(), hashlib.sha256
-    ).hexdigest()
-    return state_raw, f"{state_raw}:{state_sig}"
+    return state_raw, f"{state_raw}:{_hmac_sign(state_raw)}"
 
 
 def _verify_state(state_param: str, cookie_raw: str) -> bool:
@@ -54,10 +62,15 @@ def _verify_state(state_param: str, cookie_raw: str) -> bool:
         return False
 
     # HMAC 서명 검증
-    expected_sig = hmac.new(
-        settings.SECRET_KEY.encode(), raw.encode(), hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(sig, expected_sig)
+    return hmac.compare_digest(sig, _hmac_sign(raw))
+
+
+def _error_redirect(frontend_url: str, error: str) -> RedirectResponse:
+    """에러 코드와 함께 로그인 페이지로 리다이렉트하는 응답을 생성합니다."""
+    return RedirectResponse(
+        url=f"{frontend_url}/login?error={error}",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
 def _set_refresh_cookie(response: RedirectResponse, token: str) -> None:
@@ -73,22 +86,34 @@ def _set_refresh_cookie(response: RedirectResponse, token: str) -> None:
     )
 
 
-async def _issue_tokens_and_redirect(
-    user: User, redirect_path: str
-) -> RedirectResponse:
-    """JWT를 발급하고 프론트엔드로 리다이렉트합니다."""
+def _set_access_token_cookie(response: RedirectResponse, token: str) -> None:
+    """응답에 단기 Access Token 쿠키를 설정합니다.
+
+    URL 쿼리 파라미터 노출을 피하기 위해 쿠키로 전달합니다.
+    JS가 읽어야 하므로 HttpOnly=False이며, max_age를 짧게 설정해 노출 시간을 최소화합니다.
+    """
+    response.set_cookie(
+        key=_ACCESS_TOKEN_COOKIE,
+        value=token,
+        httponly=False,
+        secure=settings.HTTPS_ONLY,
+        samesite="lax",
+        max_age=_ACCESS_TOKEN_COOKIE_MAX_AGE,
+        path="/",
+    )
+
+
+async def _issue_tokens_and_redirect(user: User, redirect_path: str) -> RedirectResponse:
+    """JWT를 발급하고 프론트엔드로 리다이렉트합니다. 액세스 토큰은 단기 쿠키로 전달하여 URL 노출을 방지합니다."""
     access_token = create_access_token(user_id=user.id)
     raw_refresh = create_refresh_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        days=settings.JWT_REFRESH_EXPIRE_DAYS
-    )
+    expires_at = datetime.now(UTC) + timedelta(days=settings.JWT_REFRESH_EXPIRE_DAYS)
     await token_models.create_refresh_token(user.id, raw_refresh, expires_at)
 
-    redirect_url = f"{settings.FRONTEND_URL}{redirect_path}?access_token={access_token}"
-    response = RedirectResponse(
-        url=redirect_url, status_code=status.HTTP_302_FOUND
-    )
+    redirect_url = f"{settings.FRONTEND_URL}{redirect_path}"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
     _set_refresh_cookie(response, raw_refresh)
+    _set_access_token_cookie(response, access_token)
     return response
 
 
@@ -127,34 +152,22 @@ async def callback(
 
     # 사용자가 소셜 로그인을 취소한 경우
     if error:
-        response = RedirectResponse(
-            url=f"{frontend_url}/login?error=cancelled",
-            status_code=status.HTTP_302_FOUND,
-        )
+        response = _error_redirect(frontend_url, "cancelled")
         response.delete_cookie(key=_STATE_COOKIE, path="/")
         return response
 
     # state 검증
     if not state or not social_state:
-        return RedirectResponse(
-            url=f"{frontend_url}/login?error=invalid_state",
-            status_code=status.HTTP_302_FOUND,
-        )
+        return _error_redirect(frontend_url, "invalid_state")
 
     if not _verify_state(state, social_state):
-        response = RedirectResponse(
-            url=f"{frontend_url}/login?error=invalid_state",
-            status_code=status.HTTP_302_FOUND,
-        )
+        response = _error_redirect(frontend_url, "invalid_state")
         response.delete_cookie(key=_STATE_COOKIE, path="/")
         return response
 
     # code 누락 검증
     if not code:
-        return RedirectResponse(
-            url=f"{frontend_url}/login?error=missing_code",
-            status_code=status.HTTP_302_FOUND,
-        )
+        return _error_redirect(frontend_url, "missing_code")
 
     # 소셜 프로바이더에서 사용자 정보 조회
     social_provider = get_provider(provider)
@@ -163,10 +176,7 @@ async def callback(
         user_info = await social_provider.get_user_info(provider_token)
     except Exception:
         logger.exception("소셜 로그인 코드 교환/사용자 정보 조회 실패: provider=%s", provider)
-        response = RedirectResponse(
-            url=f"{frontend_url}/login?error=provider_error",
-            status_code=status.HTTP_302_FOUND,
-        )
+        response = _error_redirect(frontend_url, "provider_error")
         response.delete_cookie(key=_STATE_COOKIE, path="/")
         return response
 
@@ -174,24 +184,16 @@ async def callback(
     # (아래에서 모든 응답에 삭제 적용)
 
     # Branch 1: 이미 연동된 소셜 계정이 있는 경우
-    social_account = await social_account_models.get_by_provider(
-        user_info.provider, user_info.provider_id
-    )
+    social_account = await social_account_models.get_by_provider(user_info.provider, user_info.provider_id)
     if social_account:
         user = await user_models.get_user_by_id(social_account["user_id"])
         if not user:
-            response = RedirectResponse(
-                url=f"{frontend_url}/login?error=user_not_found",
-                status_code=status.HTTP_302_FOUND,
-            )
+            response = _error_redirect(frontend_url, "user_not_found")
             response.delete_cookie(key=_STATE_COOKIE, path="/")
             return response
 
         if user.is_suspended:
-            response = RedirectResponse(
-                url=f"{frontend_url}/login?error=suspended",
-                status_code=status.HTTP_302_FOUND,
-            )
+            response = _error_redirect(frontend_url, "suspended")
             response.delete_cookie(key=_STATE_COOKIE, path="/")
             return response
 
@@ -205,10 +207,7 @@ async def callback(
         existing_user = await user_models.get_user_by_email(user_info.email)
         if existing_user:
             if existing_user.is_suspended:
-                response = RedirectResponse(
-                    url=f"{frontend_url}/login?error=suspended",
-                    status_code=status.HTTP_302_FOUND,
-                )
+                response = _error_redirect(frontend_url, "suspended")
                 response.delete_cookie(key=_STATE_COOKIE, path="/")
                 return response
 
@@ -257,10 +256,7 @@ async def complete_signup(
             "이미 사용 중인 닉네임입니다.",
             data={},
         )
-
-    updated_user = await user_models.update_nickname_set(
-        current_user.id, body.nickname
-    )
+    updated_user = await user_models.update_nickname_set(current_user.id, body.nickname)
     if not updated_user:
         return create_response(
             "USER_NOT_FOUND",

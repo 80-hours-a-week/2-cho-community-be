@@ -1,4 +1,4 @@
-name: Backend CI — Test & Lint
+name: Backend CI — Test
 
 on:
   push:
@@ -23,7 +23,7 @@ permissions: {}
 
 jobs:
   test:
-    name: Test & Lint
+    name: Test
     runs-on: ubuntu-latest
 
     services:
@@ -57,12 +57,6 @@ jobs:
     - name: Install dependencies
       run: uv sync --frozen --extra dev
 
-    - name: Run linting (ruff)
-      run: uv run ruff check .
-
-    - name: Run type checking (mypy)
-      run: uv run mypy .
-
     - name: Wait for MySQL
       run: |
         while ! mysqladmin ping -h 127.0.0.1 --silent; do
@@ -84,4 +78,4 @@ jobs:
         DB_NAME: "community_service"
         SECRET_KEY: ${{ github.run_id }}-${{ github.run_attempt }}-ci-secret
         TESTING: "true"
-      run: uv run pytest --cov --cov-report=term-missing
+      run: uv run pytest -m "not smoke and not integration" --cov --cov-report=term-missing

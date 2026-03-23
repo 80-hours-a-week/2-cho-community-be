@@ -3,20 +3,25 @@
 사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 등의 기능을 제공합니다.
 """
 
-from fastapi import HTTPException, Request, status, UploadFile
+import logging
+
+from fastapi import HTTPException, Request, UploadFile, status
+
+from dependencies.request_context import get_request_timestamp
+from models import block_models, follow_models, user_models
 from models.user_models import User
+from schemas.common import create_response, serialize_user
+from schemas.recovery_schemas import FindEmailRequest, FindPasswordRequest
 from schemas.user_schemas import (
+    ChangePasswordRequest,
     CreateUserRequest,
     UpdateUserRequest,
-    ChangePasswordRequest,
     WithdrawRequest,
 )
-from schemas.recovery_schemas import FindEmailRequest, FindPasswordRequest
-from schemas.common import create_response, serialize_user
-from dependencies.request_context import get_request_timestamp
-from utils.upload import save_file
-from models import user_models, block_models, follow_models
 from services.user_service import UserService
+from utils.upload import save_file
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize_public_user(user) -> dict:
@@ -31,17 +36,18 @@ def _serialize_public_user(user) -> dict:
 
 async def search_users(q: str, limit: int, current_user, request) -> dict:
     """닉네임 접두어로 사용자 검색."""
+    # 빈 쿼리는 DB 조회 없이 즉시 빈 목록 반환 — 불필요한 full scan 방지
     if not q or not q.strip():
         return {"data": [], "request_timestamp": get_request_timestamp(request)}
 
+    # 클라이언트가 비정상적인 limit을 보내도 1~20 범위로 강제 — DM 수신자 선택 등 소규모 UI에 적합
     limit = min(max(limit, 1), 20)
 
     blocked_ids = await block_models.get_blocked_user_ids(current_user.id)
+    # 차단한 사용자와 자기 자신은 검색 결과에서 제외 — 차단 관계가 검색에도 반영되어야 함
     exclude_ids = blocked_ids | {current_user.id}
 
-    results = await user_models.search_users_by_nickname(
-        query=q.strip(), exclude_user_ids=exclude_ids, limit=limit
-    )
+    results = await user_models.search_users_by_nickname(query=q.strip(), exclude_user_ids=exclude_ids, limit=limit)
 
     return {"data": results, "request_timestamp": get_request_timestamp(request)}
 
@@ -54,6 +60,7 @@ async def get_user(user_id: int, request: Request) -> dict:
     """
     timestamp = get_request_timestamp(request)
 
+    # DB auto_increment는 1부터 시작하므로 0 이하는 존재할 수 없는 ID — Service 호출 전 빠른 거절
     if user_id < 1:
         # Service에서 처리할 수도 있으나, controller 레벨의 기본 유효성 검사로 남겨둠
         raise HTTPException(
@@ -72,6 +79,7 @@ async def get_user(user_id: int, request: Request) -> dict:
     # 별도 try-except 없이 처리 가능 (Global Handler 위임).
     # 단, get_user는 Service에서 user_models.get_user_by_id 호출 후 None이면 not_found_error raise함.
 
+    # 이메일은 공개 프로필에 포함하지 않음 — _serialize_public_user가 이메일 필드를 제외함
     profile = _serialize_public_user(user)
     stats = await user_models.get_user_stats(user_id)
     profile.update(stats)
@@ -86,20 +94,19 @@ async def get_user(user_id: int, request: Request) -> dict:
     )
 
 
-async def create_user(
-    user_data: CreateUserRequest, profile_image: UploadFile | None, request: Request
-) -> dict:
+async def create_user(user_data: CreateUserRequest, profile_image: UploadFile | None, request: Request) -> dict:
     """새로운 사용자를 생성합니다."""
     timestamp = get_request_timestamp(request)
 
-    # 프로필 이미지 업로드 처리
     # 이미지 업로드는 Controller에서 처리하고 URL만 Service로 넘기는 패턴 유지
     # (파일 처리는 웹 프레임워크 종속적이므로 Controller에 두는 것이 일반적)
+    # profileImageUrl이 이미 있으면 그대로 사용하고, 파일이 있으면 새로 업로드한 URL로 덮어씀
     profile_image_url = user_data.profileImageUrl
     if profile_image:
         try:
             profile_image_url = await save_file(profile_image, folder="profiles")
         except HTTPException as e:
+            # save_file의 HTTPException detail에 timestamp를 주입해 응답 형식 일관성 유지
             if isinstance(e.detail, dict):
                 e.detail["timestamp"] = timestamp
             raise e
@@ -111,14 +118,12 @@ async def create_user(
                     "message": str(e),
                     "timestamp": timestamp,
                 },
-            )
+            ) from e
 
     # Service Layer 호출
     await UserService.create_user(user_data, profile_image_url, timestamp)
 
-    return create_response(
-        "SIGNUP_SUCCESS", "사용자 생성에 성공했습니다.", timestamp=timestamp
-    )
+    return create_response("SIGNUP_SUCCESS", "사용자 생성에 성공했습니다.", timestamp=timestamp)
 
 
 async def get_my_info(current_user: User, request: Request) -> dict:
@@ -126,6 +131,7 @@ async def get_my_info(current_user: User, request: Request) -> dict:
     timestamp = get_request_timestamp(request)
 
     user_data = serialize_user(current_user)
+    # 팔로우 수는 사용자 테이블이 아닌 별도 집계 — 매 요청마다 최신값 보장을 위해 직접 조회
     follow_counts = await follow_models.get_follow_counts(current_user.id)
     user_data.update(follow_counts)
 
@@ -149,6 +155,7 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
     profile.update(stats)
     follow_counts = await follow_models.get_follow_counts(user_id)
     profile.update(follow_counts)
+    # 로그인한 사용자 기준의 팔로우 여부를 포함 — 공개 조회(get_user)와의 차이점
     profile["is_following"] = await follow_models.is_following(current_user.id, user_id)
 
     return create_response(
@@ -159,9 +166,7 @@ async def get_user_info(user_id: int, current_user: User, request: Request) -> d
     )
 
 
-async def update_user(
-    update_data: UpdateUserRequest, current_user: User, request: Request
-) -> dict:
+async def update_user(update_data: UpdateUserRequest, current_user: User, request: Request) -> dict:
     """현재 로그인 중인 사용자의 정보를 수정합니다."""
     timestamp = get_request_timestamp(request)
 
@@ -185,13 +190,11 @@ async def update_user(
     )
 
 
-async def change_password(
-    password_data: ChangePasswordRequest, current_user: User, request: Request
-) -> dict:
+async def change_password(password_data: ChangePasswordRequest, current_user: User, request: Request) -> dict:
     """현재 로그인 중인 사용자의 비밀번호를 변경합니다."""
     timestamp = get_request_timestamp(request)
 
-    # 소셜 전용 계정은 비밀번호 변경 불가
+    # 소셜 로그인 계정은 password 필드가 NULL — 비밀번호가 없으므로 변경 자체가 불가능
     if current_user.password is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -208,22 +211,20 @@ async def change_password(
         current_password=password_data.current_password,
         new_password=password_data.new_password,
         new_password_confirm=password_data.new_password_confirm,
+        # 현재 비밀번호 검증을 Service에서 수행하므로 해시값을 그대로 전달
         stored_password_hash=current_user.password,
         timestamp=timestamp,
     )
 
-    return create_response(
-        "PASSWORD_CHANGE_SUCCESS", "비밀번호 변경에 성공했습니다.", timestamp=timestamp
-    )
+    return create_response("PASSWORD_CHANGE_SUCCESS", "비밀번호 변경에 성공했습니다.", timestamp=timestamp)
 
 
-async def withdraw_user(
-    withdraw_data: WithdrawRequest, current_user: User, request: Request
-) -> dict:
+async def withdraw_user(withdraw_data: WithdrawRequest, current_user: User, request: Request) -> dict:
     """회원 탈퇴를 처리합니다."""
     timestamp = get_request_timestamp(request)
 
-    # Service Layer 호출
+    # soft delete 처리 — 실제 데이터는 삭제되지 않고 deleted_at이 설정됨
+    # current_user를 함께 전달해 소셜 계정 여부에 따른 분기 처리를 Service에 위임
     await UserService.withdraw_user(
         user_id=current_user.id,
         password=withdraw_data.password,
@@ -231,9 +232,7 @@ async def withdraw_user(
         timestamp=timestamp,
     )
 
-    return create_response(
-        "WITHDRAWAL_ACCEPTED", "탈퇴 신청이 접수되었습니다.", timestamp=timestamp
-    )
+    return create_response("WITHDRAWAL_ACCEPTED", "탈퇴 신청이 접수되었습니다.", timestamp=timestamp)
 
 
 async def upload_profile_image(
@@ -296,15 +295,13 @@ async def reset_password(body: FindPasswordRequest, request: Request) -> dict:
     Returns:
         임시 비밀번호 발송 성공 응답 딕셔너리.
     """
-    import logging
-
     timestamp = get_request_timestamp(request)
     try:
         await UserService.reset_password(body.email, timestamp)
     except RuntimeError:
-        # 이메일 발송 실패 시에도 보안상 성공 응답 반환 (이메일 존재 여부 노출 방지)
+        # 이메일 발송 실패 시에도 보안상 성공 응답 반환 — 공격자가 계정 존재 여부를 탐지하지 못하게 함
         # 비밀번호는 변경되지 않았으므로 사용자 계정에 영향 없음
-        logging.getLogger(__name__).exception("비밀번호 재설정 이메일 발송 실패")
+        logger.exception("비밀번호 재설정 이메일 발송 실패")
     return create_response(
         "RESET_PASSWORD_SUCCESS",
         "이메일을 확인해주세요. 임시 비밀번호가 발송되었습니다.",

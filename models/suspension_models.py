@@ -1,6 +1,6 @@
 """suspension_models: 계정 정지 관련 데이터 모델."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from database.connection import transactional
 
@@ -20,7 +20,7 @@ async def suspend_user(
     Returns:
         정지 성공 여부.
     """
-    suspended_until = datetime.now(timezone.utc) + timedelta(days=duration_days)
+    suspended_until = datetime.now(UTC) + timedelta(days=duration_days)
 
     async with transactional() as cur:
         await cur.execute(
@@ -48,7 +48,7 @@ async def unsuspend_user(user_id: int) -> bool:
             """
             UPDATE user
             SET suspended_until = NULL, suspended_reason = NULL
-            WHERE id = %s AND deleted_at IS NULL
+            WHERE id = %s AND deleted_at IS NULL AND suspended_until IS NOT NULL
             """,
             (user_id,),
         )

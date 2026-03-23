@@ -72,3 +72,45 @@ ignore_errors = true
 module = "load_tests.*"
 ignore_missing_imports = true
 ignore_errors = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "A",     # flake8-builtins
+    "S",     # flake8-bandit (security)
+    "T20",   # flake8-print
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "S101",  # assert 사용 허용 (테스트)
+    "S105",  # 하드코딩 비밀번호 감지 — 설정 키 이름에서 오탐
+    "S106",  # 함수 인자 비밀번호 감지 — 테스트 fixture에서 오탐
+    "B008",  # Depends() 호출 허용 (FastAPI 패턴)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "T20", "N802"]
+"load_tests/**" = ["S", "T20", "RUF002"]
+"database/seed_data.py" = ["S311", "T201", "E501", "SIM108"]
+"database/seed_data_large.py" = ["S311", "T201", "E501", "S608", "N806", "SIM108", "SIM102", "S310", "RUF002"]
+"models/**" = ["S608"]
+"models/user_models.py" = ["S608", "N802"]
+"schemas/**" = ["N815"]
+"services/affinity_scorer.py" = ["RUF002", "RUF003"]
+"middleware/rate_limiter_memory.py" = ["S104"]
+"ws_app.py" = ["S110"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

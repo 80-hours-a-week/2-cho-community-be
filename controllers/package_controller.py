@@ -15,7 +15,7 @@ from schemas.package_schemas import (
     UpdateReviewRequest,
 )
 from services.package_service import PackageService
-
+from utils.pagination import validate_pagination
 
 # ============ 패키지 관련 핸들러 ============
 
@@ -31,37 +31,24 @@ async def get_packages(
     """패키지 목록을 조회합니다."""
     timestamp = get_request_timestamp(request)
 
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    # 음수 offset은 DB 레벨에서도 거부되지만 명확한 에러 메시지를 위해 Controller에서 먼저 검사
+    # 상한선(100)을 두어 단일 요청으로 과도한 데이터를 조회하는 것을 방지
+    validate_pagination(offset, limit, timestamp)
 
     # 공백만 있는 검색어는 None으로 정규화
     if search is not None:
         search = search.strip() or None
 
-    # 유효하지 않은 정렬 옵션은 기본값으로 대체
+    # 유효하지 않은 정렬 옵션은 기본값으로 폴백 — 400 에러 대신 관용적 처리로 UX 저해 방지
     if sort not in ALLOWED_SORT_OPTIONS:
         sort = "latest"
 
     result = await PackageService.get_packages(
-        offset=offset, limit=limit, sort=sort,
-        category=category, search=search,
+        offset=offset,
+        limit=limit,
+        sort=sort,
+        category=category,
+        search=search,
     )
 
     return create_response(
@@ -98,7 +85,9 @@ async def create_package(
     timestamp = get_request_timestamp(request)
 
     package_id = await PackageService.create_package(
-        current_user.id, data, timestamp,
+        current_user.id,
+        data,
+        timestamp,
     )
 
     return create_response(
@@ -118,8 +107,12 @@ async def update_package(
     """패키지 정보를 수정합니다."""
     timestamp = get_request_timestamp(request)
 
+    # is_admin을 전달해 Service에서 작성자 본인 외 관리자도 수정 가능하도록 분기
     result = await PackageService.update_package(
-        package_id, current_user.id, data, timestamp,
+        package_id,
+        current_user.id,
+        data,
+        timestamp,
         is_admin=current_user.is_admin,
     )
 
@@ -144,31 +137,18 @@ async def get_reviews(
     """패키지 리뷰 목록을 조회합니다."""
     timestamp = get_request_timestamp(request)
 
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_offset",
-                "message": "시작 위치는 0 이상이어야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
+    validate_pagination(offset, limit, timestamp)
 
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_limit",
-                "message": "페이지 크기는 1~100 사이여야 합니다.",
-                "timestamp": timestamp,
-            },
-        )
-
+    # 리뷰 정렬 옵션은 패키지 목록과 별도로 관리 — 리뷰에는 '평점순' 등 추가 옵션이 있을 수 있음
     if sort not in ALLOWED_REVIEW_SORT_OPTIONS:
         sort = "latest"
 
     result = await PackageService.get_reviews(
-        package_id, offset, limit, sort=sort, timestamp=timestamp,
+        package_id,
+        offset,
+        limit,
+        sort=sort,
+        timestamp=timestamp,
     )
 
     return create_response(
@@ -191,9 +171,14 @@ async def create_review(
     """
     timestamp = get_request_timestamp(request)
 
+    # IntegrityError는 DB의 unique 제약 위반 — 동일 사용자의 중복 리뷰를 409로 변환
+    # from None으로 원인 체인을 숨겨 내부 DB 오류 정보가 응답에 노출되지 않도록 함
     try:
         review_id = await PackageService.create_review(
-            package_id, current_user.id, data, timestamp,
+            package_id,
+            current_user.id,
+            data,
+            timestamp,
         )
     except IntegrityError:
         raise HTTPException(
@@ -203,7 +188,7 @@ async def create_review(
                 "message": "이미 이 패키지에 리뷰를 작성했습니다.",
                 "timestamp": timestamp,
             },
-        )
+        ) from None
 
     return create_response(
         "REVIEW_CREATED",
@@ -224,7 +209,11 @@ async def update_review(
     timestamp = get_request_timestamp(request)
 
     result = await PackageService.update_review(
-        package_id, review_id, current_user.id, data, timestamp,
+        package_id,
+        review_id,
+        current_user.id,
+        data,
+        timestamp,
     )
 
     return create_response(
@@ -244,9 +233,13 @@ async def delete_review(
     """리뷰를 삭제합니다."""
     timestamp = get_request_timestamp(request)
 
+    # 관리자는 타인의 리뷰도 삭제 가능 — 부적절한 리뷰 제거를 위한 관리 기능
     await PackageService.delete_review(
-        package_id, review_id, current_user.id,
-        is_admin=current_user.is_admin, timestamp=timestamp,
+        package_id,
+        review_id,
+        current_user.id,
+        is_admin=current_user.is_admin,
+        timestamp=timestamp,
     )
 
     return create_response(
