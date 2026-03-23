@@ -1,32 +1,6 @@
-"""category_controller: 카테고리 관련 컨트롤러 모듈."""
+"""category_controller: 하위 호환용 re-export 스텁.
 
-from fastapi import Request
+실제 구현은 modules.content.category_controller로 이동했습니다.
+"""
 
-from dependencies.request_context import get_request_timestamp
-from models import category_models
-from schemas.common import create_response
-
-
-async def get_categories(request: Request) -> dict:
-    """카테고리 목록을 조회합니다."""
-    timestamp = get_request_timestamp(request)
-
-    categories = await category_models.get_all_categories()
-
-    return create_response(
-        "CATEGORIES_RETRIEVED",
-        "카테고리 목록 조회에 성공했습니다.",
-        data={
-            "categories": [
-                {
-                    "category_id": cat.id,
-                    "name": cat.name,
-                    "slug": cat.slug,
-                    "description": cat.description,
-                    "sort_order": cat.sort_order,
-                }
-                for cat in categories
-            ]
-        },
-        timestamp=timestamp,
-    )
+from modules.content.category_controller import *  # noqa: F403

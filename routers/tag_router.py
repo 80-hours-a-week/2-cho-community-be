@@ -1,13 +1,6 @@
-"""tag_router: 태그 관련 라우터 모듈."""
+"""tag_router: 하위 호환용 re-export 스텁.
 
-from fastapi import APIRouter, Query, Request, status
+실제 구현은 modules.content.tag_router로 이동했습니다.
+"""
 
-from controllers import tag_controller
-
-tag_router = APIRouter(prefix="/v1/tags", tags=["tags"])
-
-
-@tag_router.get("/", status_code=status.HTTP_200_OK)
-async def get_tags(request: Request, search: str = Query(default="")) -> dict:
-    """태그 자동완성 검색. 인증 불필요."""
-    return await tag_controller.get_tags(request, search=search)
+from modules.content.tag_router import *  # noqa: F403

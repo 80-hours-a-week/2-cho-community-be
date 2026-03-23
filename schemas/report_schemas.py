@@ -1,59 +1,6 @@
-"""report_schemas: 신고 관련 Pydantic 모델 모듈."""
+"""report_schemas: 하위 호환용 re-export 스텁.
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+실제 구현은 modules.admin.report_schemas로 이동했습니다.
+"""
 
-VALID_TARGET_TYPES = {"post", "comment"}
-VALID_REASONS = {"spam", "abuse", "inappropriate", "other"}
-VALID_RESOLVE_STATUSES = {"resolved", "dismissed"}
-
-
-class CreateReportRequest(BaseModel):
-    """신고 생성 요청 모델."""
-
-    target_type: str = Field(..., description="신고 대상 타입 (post, comment)")
-    target_id: int = Field(..., ge=1, description="신고 대상 ID")
-    reason: str = Field(..., description="신고 사유 (spam, abuse, inappropriate, other)")
-    description: str | None = Field(None, max_length=500, description="상세 설명 (선택)")
-
-    @field_validator("target_type")
-    @classmethod
-    def validate_target_type(cls, v: str) -> str:
-        if v not in VALID_TARGET_TYPES:
-            raise ValueError(f"유효하지 않은 신고 대상입니다: {v}")
-        return v
-
-    @field_validator("reason")
-    @classmethod
-    def validate_reason(cls, v: str) -> str:
-        if v not in VALID_REASONS:
-            raise ValueError(f"유효하지 않은 신고 사유입니다: {v}")
-        return v
-
-    @field_validator("description")
-    @classmethod
-    def validate_description(cls, v: str | None) -> str | None:
-        if v is not None:
-            v = v.strip()
-            return v if v else None
-        return None
-
-
-class ResolveReportRequest(BaseModel):
-    """신고 처리 요청 모델."""
-
-    status: str = Field(..., description="처리 상태 (resolved, dismissed)")
-    suspend_days: int | None = Field(None, ge=1, le=365, description="사용자 정지 기간 (일, resolved 시에만 적용)")
-
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, v: str) -> str:
-        if v not in VALID_RESOLVE_STATUSES:
-            raise ValueError(f"유효하지 않은 처리 상태입니다: {v}")
-        return v
-
-    @model_validator(mode="after")
-    def validate_suspend_only_on_resolved(self):
-        """suspend_days는 resolved 상태에서만 허용합니다."""
-        if self.suspend_days is not None and self.status != "resolved":
-            raise ValueError("정지는 resolved 처리 시에만 적용할 수 있습니다.")
-        return self
+from modules.admin.report_schemas import *  # noqa: F403

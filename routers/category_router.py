@@ -1,13 +1,6 @@
-"""category_router: 카테고리 관련 라우터 모듈."""
+"""category_router: 하위 호환용 re-export 스텁.
 
-from fastapi import APIRouter, Request, status
+실제 구현은 modules.content.category_router로 이동했습니다.
+"""
 
-from controllers import category_controller
-
-category_router = APIRouter(prefix="/v1/categories", tags=["categories"])
-
-
-@category_router.get("/", status_code=status.HTTP_200_OK)
-async def get_categories(request: Request) -> dict:
-    """카테고리 목록을 조회합니다. 인증 불필요."""
-    return await category_controller.get_categories(request)
+from modules.content.category_router import *  # noqa: F403
