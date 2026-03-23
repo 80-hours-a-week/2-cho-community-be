@@ -1,0 +1,9 @@
+# .pre-commit-config.yaml
+# 커밋 전 코드 품질 자동 검사
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
