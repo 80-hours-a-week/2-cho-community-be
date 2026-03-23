@@ -1,17 +1,3 @@
-"""pagination: 페이지네이션 파라미터 검증 유틸리티."""
+"""하위 호환성을 위한 re-export. 실제 구현은 core/utils/pagination.py에 위치."""
 
-from fastapi import HTTPException, status
-
-
-def validate_pagination(offset: int, limit: int, timestamp: str) -> None:
-    """페이지네이션 파라미터 검증. 유효하지 않으면 400 에러."""
-    if offset < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_offset", "message": "offset은 0 이상이어야 합니다.", "timestamp": timestamp},
-        )
-    if limit < 1 or limit > 100:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_limit", "message": "limit은 1~100 사이여야 합니다.", "timestamp": timestamp},
-        )
+from core.utils.pagination import *  # noqa: F403

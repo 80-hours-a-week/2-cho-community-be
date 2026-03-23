@@ -45,7 +45,7 @@ k8s = [
 ]
 
 [tool.setuptools]
-packages = ["routers", "controllers", "schemas", "models", "dependencies", "middleware", "utils"]
+packages = ["core", "core.database", "core.middleware", "core.dependencies", "core.utils", "routers", "controllers", "schemas", "models", "dependencies", "middleware", "utils"]
 py-modules = ["main"]
 
 [tool.mypy]
@@ -104,11 +104,14 @@ ignore = [
 "load_tests/**" = ["S", "T20", "RUF002"]
 "database/seed_data.py" = ["S311", "T201", "E501", "SIM108"]
 "database/seed_data_large.py" = ["S311", "T201", "E501", "S608", "N806", "SIM108", "SIM102", "S310", "RUF002"]
+"core/database/seed_data.py" = ["S311", "T201", "E501", "SIM108"]
+"core/database/seed_data_large.py" = ["S311", "T201", "E501", "S608", "N806", "SIM108", "SIM102", "S310", "RUF002"]
 "models/**" = ["S608"]
 "models/user_models.py" = ["S608", "N802"]
 "schemas/**" = ["N815"]
 "services/affinity_scorer.py" = ["RUF002", "RUF003"]
 "middleware/rate_limiter_memory.py" = ["S104"]
+"core/middleware/rate_limiter_memory.py" = ["S104"]
 "ws_app.py" = ["S110"]
 
 [tool.ruff.format]
