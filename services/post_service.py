@@ -15,6 +15,11 @@ from utils.exceptions import bad_request_error, forbidden_error, not_found_error
 from utils.formatters import format_datetime
 from utils.mention import extract_mentions
 
+logger = logging.getLogger(__name__)
+
+# 게시글 목록에서 미리보기로 보여줄 최대 글자 수
+POST_PREVIEW_LENGTH = 200
+
 
 class PostService:
     """게시글 관리 서비스."""
@@ -94,8 +99,8 @@ class PostService:
             post["updated_at"] = format_datetime(post.get("updated_at"))
 
             content = post["content"]
-            if len(content) > 200:
-                post["content"] = content[:200] + "..."
+            if len(content) > POST_PREVIEW_LENGTH:
+                post["content"] = content[:POST_PREVIEW_LENGTH] + "..."
 
         # 태그 벌크 조회
         post_ids = [p["post_id"] for p in posts_data]
@@ -280,7 +285,7 @@ class PostService:
                         bulk_rows.append((follower_id, "follow", post.id, None, user_id))
                 await notification_models.create_notifications_bulk(bulk_rows)
         except Exception:
-            logging.getLogger(__name__).warning("팔로우 알림 생성 실패", exc_info=True)
+            logger.warning("팔로우 알림 생성 실패", exc_info=True)
 
         # 게시글 본문 멘션 알림 — 닉네임 일괄 조회로 N+1 방지
         nicknames = extract_mentions(post_data.content)
@@ -288,7 +293,7 @@ class PostService:
             try:
                 mentioned_users = await get_users_by_nicknames(list(nicknames))
             except Exception:
-                logging.getLogger(__name__).warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                logger.warning("멘션 사용자 일괄 조회 실패", exc_info=True)
                 mentioned_users = {}
             for mentioned_user in mentioned_users.values():
                 await safe_notify(
@@ -359,7 +364,7 @@ class PostService:
                 try:
                     mentioned_users = await get_users_by_nicknames(list(new_mentions))
                 except Exception:
-                    logging.getLogger(__name__).warning("멘션 사용자 일괄 조회 실패", exc_info=True)
+                    logger.warning("멘션 사용자 일괄 조회 실패", exc_info=True)
                     mentioned_users = {}
                 for mentioned_user in mentioned_users.values():
                     await safe_notify(
@@ -445,8 +450,8 @@ class PostService:
             p["created_at"] = format_datetime(p["created_at"])
             p["updated_at"] = format_datetime(p.get("updated_at"))
             content = p["content"]
-            if len(content) > 200:
-                p["content"] = content[:200] + "..."
+            if len(content) > POST_PREVIEW_LENGTH:
+                p["content"] = content[:POST_PREVIEW_LENGTH] + "..."
 
         # 6. 태그 벌크 조회
         post_ids = [p["post_id"] for p in posts_data]

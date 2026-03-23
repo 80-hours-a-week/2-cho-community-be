@@ -11,6 +11,9 @@ from database.connection import get_connection, transactional
 from models.comment_models import get_comments_with_author
 from schemas.common import build_author_dict
 
+# 게시글당 허용되는 최대 이미지 수
+MAX_POST_IMAGES = 5
+
 # SQL Injection 방지: 허용된 컬럼명 whitelist
 ALLOWED_POST_COLUMNS = {"title", "content", "image_url", "category_id", "updated_at"}
 
@@ -601,7 +604,7 @@ async def save_post_images(post_id: int, image_urls: list[str]) -> None:
             "DELETE FROM post_image WHERE post_id = %s",
             (post_id,),
         )
-        for idx, url in enumerate(image_urls[:5]):
+        for idx, url in enumerate(image_urls[:MAX_POST_IMAGES]):
             await cur.execute(
                 """
                 INSERT INTO post_image (post_id, image_url, sort_order)

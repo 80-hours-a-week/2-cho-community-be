@@ -15,6 +15,9 @@ from utils.websocket_pusher import push_to_user
 
 logger = logging.getLogger(__name__)
 
+# DM 목록에서 미리보기로 보여줄 최대 글자 수
+DM_PREVIEW_LENGTH = 100
+
 
 def get_other_user_id(conversation: Conversation, current_user_id: int) -> int:
     """대화에서 상대방의 user_id를 반환합니다."""
@@ -235,7 +238,7 @@ async def send_message_and_push(conversation: Conversation, sender: User, conten
                 "conversation_id": conversation.id,
                 "sender_id": sender.id,
                 "sender_nickname": sender.nickname,
-                "content": content[:100],
+                "content": content[:DM_PREVIEW_LENGTH],
                 "created_at": message.get("created_at"),
             },
         )

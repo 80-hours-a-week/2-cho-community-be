@@ -3,6 +3,8 @@
 사용자 등록, 조회, 수정, 비밀번호 변경, 탈퇴 등의 기능을 제공합니다.
 """
 
+import logging
+
 from fastapi import HTTPException, Request, UploadFile, status
 
 from dependencies.request_context import get_request_timestamp
@@ -18,6 +20,8 @@ from schemas.user_schemas import (
 )
 from services.user_service import UserService
 from utils.upload import save_file
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize_public_user(user) -> dict:
@@ -291,15 +295,13 @@ async def reset_password(body: FindPasswordRequest, request: Request) -> dict:
     Returns:
         임시 비밀번호 발송 성공 응답 딕셔너리.
     """
-    import logging
-
     timestamp = get_request_timestamp(request)
     try:
         await UserService.reset_password(body.email, timestamp)
     except RuntimeError:
         # 이메일 발송 실패 시에도 보안상 성공 응답 반환 — 공격자가 계정 존재 여부를 탐지하지 못하게 함
         # 비밀번호는 변경되지 않았으므로 사용자 계정에 영향 없음
-        logging.getLogger(__name__).exception("비밀번호 재설정 이메일 발송 실패")
+        logger.exception("비밀번호 재설정 이메일 발송 실패")
     return create_response(
         "RESET_PASSWORD_SUCCESS",
         "이메일을 확인해주세요. 임시 비밀번호가 발송되었습니다.",

@@ -6,9 +6,11 @@ HTTP 관련 처리(쿠키, Request/Response)는 컨트롤러에 위임합니다.
 
 import asyncio
 import logging
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from fastapi import HTTPException, status
 
 from core.config import settings
@@ -21,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 # 타이밍 공격 방지: 존재하지 않는 사용자에 대해서도 bcrypt 비교를 수행하여 응답 시간 차이로
 # 사용자 존재 여부가 노출되지 않도록 함
-_TIMING_ATTACK_DUMMY_HASH = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxwKc.60VF.wdz.xGto8.H82o.f2y"
+# 시작 시 랜덤 더미 해시 생성 — 공개된 해시값 사용 방지
+_TIMING_ATTACK_DUMMY_HASH = bcrypt.hashpw(secrets.token_hex(16).encode(), bcrypt.gensalt()).decode()
 
 
 @dataclass

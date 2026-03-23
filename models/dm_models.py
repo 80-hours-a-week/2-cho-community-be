@@ -7,6 +7,9 @@ from database.connection import get_connection, transactional
 from schemas.common import DEFAULT_PROFILE_IMAGE
 from utils.formatters import format_datetime
 
+# DM 목록에서 미리보기로 보여줄 최대 글자 수
+DM_PREVIEW_LENGTH = 100
+
 
 @dataclass
 class Conversation:
@@ -209,7 +212,7 @@ async def get_conversations(user_id: int, offset: int = 0, limit: int = 20) -> t
                     "is_deleted": True,
                 }
             elif last_content is not None:
-                truncated = last_content[:100] + ("..." if len(last_content) > 100 else "")
+                truncated = last_content[:DM_PREVIEW_LENGTH] + ("..." if len(last_content) > DM_PREVIEW_LENGTH else "")
                 last_message = {
                     "content": truncated,
                     "is_mine": last_sender_id == user_id,
