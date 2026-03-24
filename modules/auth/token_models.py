@@ -138,19 +138,6 @@ async def atomic_rotate_refresh_token(
     return user_id
 
 
-async def delete_user_refresh_tokens(user_id: int) -> None:
-    """특정 사용자의 모든 Refresh Token을 삭제합니다 (회원 탈퇴/강제 로그아웃).
-
-    Args:
-        user_id: 사용자 ID.
-    """
-    async with transactional() as cur:
-        await cur.execute(
-            "DELETE FROM refresh_token WHERE user_id = %s",
-            (user_id,),
-        )
-
-
 async def cleanup_expired_tokens() -> int:
     """만료된 Refresh Token을 일괄 삭제합니다.
 

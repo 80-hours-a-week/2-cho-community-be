@@ -186,28 +186,6 @@ def _is_valid_internal_key(request: Request) -> bool:
     return hmac.compare_digest(key, settings.INTERNAL_API_KEY)
 
 
-async def require_internal(request: Request) -> None:
-    """내부 API 호출 인증을 요구합니다.
-
-    EventBridge 등 자동화된 호출에서 X-Internal-Key 헤더로 인증합니다.
-
-    Args:
-        request: FastAPI Request 객체.
-
-    Raises:
-        HTTPException: 키가 없거나 유효하지 않으면 403.
-    """
-    if not _is_valid_internal_key(request):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "forbidden",
-                "message": "유효한 내부 API 키가 필요합니다.",
-                "timestamp": get_request_timestamp(request),
-            },
-        )
-
-
 async def require_admin_or_internal(request: Request) -> User | None:
     """관리자 JWT 또는 내부 API 키 인증을 요구합니다.
 

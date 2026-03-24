@@ -100,24 +100,6 @@ async def verify_token(raw_token: str) -> int | None:
     return user_id
 
 
-async def is_user_verified(user_id: int) -> bool:
-    """사용자의 이메일 인증 여부를 확인합니다.
-
-    Args:
-        user_id: 사용자 ID.
-
-    Returns:
-        인증 완료 시 True, 미인증 또는 사용자 미존재 시 False.
-    """
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT email_verified FROM user WHERE id = %s AND deleted_at IS NULL",
-            (user_id,),
-        )
-        row = await cur.fetchone()
-        return bool(row[0]) if row else False
-
-
 async def cleanup_expired_verification_tokens() -> int:
     """만료된 이메일 인증 토큰을 일괄 삭제합니다.
 

@@ -162,39 +162,6 @@ async def get_reviews_count(package_id: int) -> int:
         return row[0] if row else 0
 
 
-async def get_user_review(package_id: int, user_id: int) -> dict | None:
-    """사용자가 특정 패키지에 작성한 리뷰를 조회합니다.
-
-    Args:
-        package_id: 패키지 ID.
-        user_id: 사용자 ID.
-
-    Returns:
-        리뷰 딕셔너리, 없으면 None.
-    """
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            """
-                SELECT pr.id, pr.rating, pr.title, pr.content,
-                       pr.created_at, pr.updated_at
-                FROM package_review pr
-                WHERE pr.package_id = %s AND pr.user_id = %s AND pr.deleted_at IS NULL
-                """,
-            (package_id, user_id),
-        )
-        row = await cur.fetchone()
-        if not row:
-            return None
-        return {
-            "review_id": row[0],
-            "rating": row[1],
-            "title": row[2],
-            "content": row[3],
-            "created_at": format_datetime(row[4]),
-            "updated_at": format_datetime(row[5]),
-        }
-
-
 async def update_review(
     review_id: int,
     rating: int | None = None,

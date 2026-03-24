@@ -58,52 +58,6 @@ def _row_to_comment(row: tuple) -> Comment:
     )
 
 
-async def get_comments_by_post(post_id: int) -> list[Comment]:
-    """특정 게시글의 댓글 목록을 조회합니다.
-
-    삭제되지 않은 댓글을 작성순으로 정렬하여 반환합니다.
-
-    Args:
-        post_id: 게시글 ID.
-
-    Returns:
-        댓글 목록.
-    """
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            """
-                SELECT id, content, author_id, post_id, created_at, updated_at, deleted_at, parent_id
-                FROM comment
-                WHERE post_id = %s AND deleted_at IS NULL
-                ORDER BY created_at ASC
-                """,
-            (post_id,),
-        )
-        rows = await cur.fetchall()
-        return [_row_to_comment(row) for row in rows]
-
-
-async def get_comments_count_by_post(post_id: int) -> int:
-    """특정 게시글의 댓글 수를 조회합니다.
-
-    Args:
-        post_id: 게시글 ID.
-
-    Returns:
-        댓글 수.
-    """
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            """
-                SELECT COUNT(*) FROM comment
-                WHERE post_id = %s AND deleted_at IS NULL
-                """,
-            (post_id,),
-        )
-        row = await cur.fetchone()
-        return row[0] if row else 0
-
-
 async def get_comment_by_id(comment_id: int) -> Comment | None:
     """ID로 댓글을 조회합니다.
 

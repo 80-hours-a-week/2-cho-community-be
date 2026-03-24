@@ -29,15 +29,3 @@ async def save_file(file: UploadFile, folder: str = "images") -> str:
     from core.utils.storage import save_uploaded_file
 
     return await save_uploaded_file(file, folder=folder)
-
-
-async def delete_image(image_url: str) -> bool:
-    """이미지를 삭제합니다."""
-    if _STORAGE_BACKEND == "s3":
-        from core.utils.storage_s3 import delete_file_s3
-
-        return delete_file_s3(image_url)
-
-    from core.utils.storage import delete_file
-
-    return delete_file(image_url)

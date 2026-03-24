@@ -82,41 +82,6 @@ async def get_wiki_page_by_slug(slug: str) -> dict | None:
         }
 
 
-async def get_wiki_page_by_id(wiki_page_id: int) -> dict | None:
-    """ID로 위키 페이지를 조회합니다 (권한 확인용, JOIN 없음).
-
-    Args:
-        wiki_page_id: 조회할 위키 페이지 ID.
-
-    Returns:
-        위키 페이지 딕셔너리, 없으면 None.
-    """
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            """
-                SELECT id, title, slug, content, author_id,
-                       last_edited_by, views_count, created_at, updated_at
-                FROM wiki_page
-                WHERE id = %s AND deleted_at IS NULL
-                """,
-            (wiki_page_id,),
-        )
-        row = await cur.fetchone()
-        if not row:
-            return None
-        return {
-            "wiki_page_id": row[0],
-            "title": row[1],
-            "slug": row[2],
-            "content": row[3],
-            "author_id": row[4],
-            "last_edited_by": row[5],
-            "views_count": row[6],
-            "created_at": format_datetime(row[7]),
-            "updated_at": format_datetime(row[8]),
-        }
-
-
 async def slug_exists(slug: str, exclude_id: int | None = None) -> bool:
     """슬러그 중복 여부를 확인합니다.
 

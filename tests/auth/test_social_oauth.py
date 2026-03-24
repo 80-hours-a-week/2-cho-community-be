@@ -75,16 +75,19 @@ async def social_callback(
     if include_state_param:
         params["state"] = full_state
 
-    cookies: dict[str, str] = {}
+    # httpx 0.28.1+: per-request cookies= 파라미터 deprecated → 클라이언트에 설정
     if include_state_cookie:
-        cookies["social_state"] = state_raw
+        client.cookies.set("social_state", state_raw)
 
-    return await client.get(
+    response = await client.get(
         f"/v1/auth/social/{provider}/callback",
         params=params,
-        cookies=cookies,
         follow_redirects=False,
     )
+
+    # 테스트 간 쿠키 오염 방지
+    client.cookies.clear()
+    return response
 
 
 # ---------------------------------------------------------------------------

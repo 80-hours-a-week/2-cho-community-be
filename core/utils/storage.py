@@ -126,21 +126,25 @@ async def save_uploaded_file(file: UploadFile, folder: str = "images") -> str:
             },
         )
 
-    # 8. Resize image based on folder (purpose)
+    # 8. Resize image based on folder (purpose) — CPU 바운드, 이벤트 루프 차단 방지
+    import asyncio
+
     from core.utils.image_resize import resize_for_post, resize_for_profile
 
     if folder == "profiles":
-        content = resize_for_profile(content)
+        content = await asyncio.to_thread(resize_for_profile, content)
     elif folder in ("posts", "images"):
-        content = resize_for_post(content)
+        content = await asyncio.to_thread(resize_for_post, content)
 
-    # 9. Generate unique filename and save
+    # 9. Generate unique filename and save — 동기 파일 I/O 오프로드
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     save_dir = UPLOAD_DIR / folder
-    save_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = save_dir / unique_filename
-    file_path.write_bytes(content)
+    def _write_file() -> None:
+        save_dir.mkdir(parents=True, exist_ok=True)
+        (save_dir / unique_filename).write_bytes(content)
+
+    await asyncio.to_thread(_write_file)
 
     # 10. Return URL path (nginx serves /uploads/*)
     return f"/uploads/{folder}/{unique_filename}"

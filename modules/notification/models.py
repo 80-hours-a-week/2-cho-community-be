@@ -157,16 +157,6 @@ async def get_notifications(user_id: int, offset: int = 0, limit: int = 20) -> t
     return notifications, total_count
 
 
-async def get_unread_count(user_id: int) -> int:
-    """읽지 않은 알림 수를 반환합니다."""
-    async with get_connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT COUNT(*) FROM notification WHERE user_id = %s AND is_read = 0",
-            (user_id,),
-        )
-        return (await cur.fetchone())[0]
-
-
 async def get_unread_count_with_latest(user_id: int) -> dict:
     """읽지 않은 알림 수와 최신 알림 1건을 반환합니다.
 
