@@ -14,23 +14,25 @@ from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.config import settings
-from database.connection import close_db, init_db
-from middleware import LoggingMiddleware, RateLimitMiddleware, TimingMiddleware
-from middleware.exception_handler import (
+from core.database.connection import close_db, init_db
+from core.middleware import RateLimitMiddleware, TimingMiddleware
+from core.middleware.exception_handler import (
     global_exception_handler,
     request_validation_exception_handler,
 )
-from routers import draft_router, notification_router, social_auth_router
-from routers.auth_router import auth_router
-from routers.category_router import category_router
-from routers.dm_router import router as dm_router
-from routers.package_router import package_router
-from routers.post_router import post_router
-from routers.report_router import report_router
-from routers.tag_router import tag_router
-from routers.terms_router import terms_router
-from routers.user_router import user_router
-from routers.wiki_router import wiki_router
+from modules.admin.router import report_router
+from modules.auth.router import auth_router
+from modules.auth.social_router import router as social_auth_router
+from modules.content.category_router import category_router
+from modules.content.draft_router import router as draft_router
+from modules.content.tag_router import tag_router
+from modules.content.terms_router import terms_router
+from modules.dm.router import router as dm_router
+from modules.notification.router import router as notification_router
+from modules.package.router import package_router
+from modules.post.router import post_router
+from modules.user.router import user_router
+from modules.wiki.router import wiki_router
 
 logger = logging.getLogger("api")
 
@@ -46,6 +48,10 @@ async def lifespan(app: FastAPI):
     """
     await init_db()
     yield
+    # Redis 연결 종료 (레이트리밋, WebSocket pusher가 사용)
+    from core.utils.redis_client import close_redis
+
+    await close_redis()
     await close_db()
 
 
@@ -58,8 +64,6 @@ app = FastAPI(
 
 # 각 요청에 타임스탬프를 주입하여 request.state에서 접근 가능하게 함
 app.add_middleware(TimingMiddleware)
-
-app.add_middleware(LoggingMiddleware)
 
 # 브루트포스 공격 방지를 위한 IP 기반 요청 속도 제한
 app.add_middleware(RateLimitMiddleware)
@@ -85,10 +89,10 @@ app.include_router(terms_router)
 app.include_router(category_router)
 app.include_router(tag_router)
 app.include_router(report_router)
-app.include_router(notification_router.router)
+app.include_router(notification_router)
 app.include_router(dm_router)
-app.include_router(social_auth_router.router)
-app.include_router(draft_router.router)
+app.include_router(social_auth_router)
+app.include_router(draft_router)
 app.include_router(package_router)
 app.include_router(wiki_router)
 
@@ -121,14 +125,36 @@ if _upload_dir:
     app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 
-@app.get("/health", status_code=200)
-async def health_check():
-    """서버 상태 및 DB 연결 확인."""
-    from database.connection import test_connection
+@app.get("/livez", status_code=200)
+async def liveness():
+    """프로세스 생존 확인 — K8s liveness probe용. DB 상태와 무관."""
+    return {"status": "ok"}
+
+
+async def _check_readiness():
+    """DB 연결 확인 공통 로직. 실패 시 503 반환."""
+    from fastapi.responses import JSONResponse
+
+    from core.database.connection import test_connection
 
     if await test_connection():
         return {"status": "ok", "database": "connected"}
-    return {"status": "error", "database": "disconnected"}
+    return JSONResponse(
+        status_code=503,
+        content={"status": "error", "database": "disconnected"},
+    )
+
+
+@app.get("/readyz", status_code=200)
+async def readiness():
+    """트래픽 수신 가능 여부 — K8s readiness probe용. DB 연결 실패 시 503."""
+    return await _check_readiness()
+
+
+@app.get("/health", status_code=200)
+async def health_check():
+    """하위 호환 헬스체크 — /readyz와 동일."""
+    return await _check_readiness()
 
 
 app.add_exception_handler(Exception, global_exception_handler)

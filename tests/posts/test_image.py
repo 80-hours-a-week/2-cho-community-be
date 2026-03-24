@@ -1,13 +1,19 @@
 """Posts 도메인 — 이미지 업로드 테스트."""
 
+from io import BytesIO
 from unittest.mock import patch
 
 import pytest
+from PIL import Image
 
 from tests.conftest import create_verified_user
 
-# JPEG 매직넘버 + 가짜 바이트
-FAKE_JPEG = b"\xff\xd8\xff" + b"\x00" * 100
+
+def _make_image(fmt: str = "JPEG") -> bytes:
+    """Pillow로 유효한 최소 이미지를 생성한다 (python-magic 호환)."""
+    buf = BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(buf, format=fmt)
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -20,10 +26,10 @@ async def test_upload_post_image_succeeds(client, fake, tmp_path):
     """유효한 JPEG 파일 업로드 시 201과 이미지 URL을 반환한다."""
     user = await create_verified_user(client, fake)
 
-    with patch("utils.storage.UPLOAD_DIR", tmp_path):
+    with patch("core.utils.storage.UPLOAD_DIR", tmp_path):
         res = await client.post(
             "/v1/posts/image",
-            files={"file": ("test.jpg", FAKE_JPEG, "image/jpeg")},
+            files={"file": ("test.jpg", _make_image("JPEG"), "image/jpeg")},
             headers=user["headers"],
         )
 
@@ -44,7 +50,7 @@ async def test_upload_invalid_mime_type_returns_400(client, fake, tmp_path):
     """허용되지 않는 MIME 타입의 파일 업로드 시 400을 반환한다."""
     user = await create_verified_user(client, fake)
 
-    with patch("utils.storage.UPLOAD_DIR", tmp_path):
+    with patch("core.utils.storage.UPLOAD_DIR", tmp_path):
         res = await client.post(
             "/v1/posts/image",
             files={"file": ("test.txt", b"plain text", "text/plain")},
@@ -59,18 +65,15 @@ async def test_upload_invalid_mime_type_returns_400(client, fake, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-FAKE_PNG = b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a" + b"\x00" * 100
-
-
 @pytest.mark.asyncio
 async def test_upload_png_image_succeeds(client, fake, tmp_path):
     """유효한 PNG 파일 업로드 시 201을 반환한다."""
     user = await create_verified_user(client, fake)
 
-    with patch("utils.storage.UPLOAD_DIR", tmp_path):
+    with patch("core.utils.storage.UPLOAD_DIR", tmp_path):
         res = await client.post(
             "/v1/posts/image",
-            files={"file": ("test.png", FAKE_PNG, "image/png")},
+            files={"file": ("test.png", _make_image("PNG"), "image/png")},
             headers=user["headers"],
         )
 
