@@ -15,7 +15,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /uvx /bin/
 
 # 시스템 의존성 (mysqlclient 빌드용)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc default-libmysqlclient-dev pkg-config && \
+    apt-get install -y --no-install-recommends gcc default-libmysqlclient-dev pkg-config libmagic1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 설치

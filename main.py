@@ -15,7 +15,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.config import settings
 from core.database.connection import close_db, init_db
-from core.middleware import LoggingMiddleware, RateLimitMiddleware, TimingMiddleware
+from core.middleware import RateLimitMiddleware, TimingMiddleware
 from core.middleware.exception_handler import (
     global_exception_handler,
     request_validation_exception_handler,
@@ -64,8 +64,6 @@ app = FastAPI(
 
 # 각 요청에 타임스탬프를 주입하여 request.state에서 접근 가능하게 함
 app.add_middleware(TimingMiddleware)
-
-app.add_middleware(LoggingMiddleware)
 
 # 브루트포스 공격 방지를 위한 IP 기반 요청 속도 제한
 app.add_middleware(RateLimitMiddleware)

@@ -8,6 +8,7 @@ import os
 import uuid
 from pathlib import Path
 
+import magic
 from fastapi import HTTPException, UploadFile, status
 
 # Upload directory (configurable via environment variable)
@@ -23,30 +24,18 @@ ALLOWED_MIME_TYPES = {
 }
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Image magic numbers (file signatures)
-MAGIC_NUMBERS = {
-    "jpg": [b"\xff\xd8\xff"],
-    "jpeg": [b"\xff\xd8\xff"],
-    "png": [b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"],
-    "gif": [b"\x47\x49\x46\x38\x37\x61", b"\x47\x49\x46\x38\x39\x61"],
-    "webp": [b"\x52\x49\x46\x46"],
-}
-
 
 def validate_image_signature(data: bytes) -> bool:
-    """Validate file content against known image signatures.
+    """python-magic으로 파일 콘텐츠의 실제 MIME 타입을 검증합니다.
 
     Args:
-        data: File content bytes.
+        data: 파일 콘텐츠 바이트.
 
     Returns:
-        True if valid image signature, False otherwise.
+        True if 허용된 이미지 MIME 타입, False otherwise.
     """
-    for signatures in MAGIC_NUMBERS.values():
-        for signature in signatures:
-            if data.startswith(signature):
-                return True
-    return False
+    detected_mime = magic.from_buffer(data, mime=True)
+    return detected_mime in ALLOWED_MIME_TYPES
 
 
 async def save_uploaded_file(file: UploadFile, folder: str = "images") -> str:
@@ -116,7 +105,7 @@ async def save_uploaded_file(file: UploadFile, folder: str = "images") -> str:
             },
         )
 
-    # 7. Validate magic number
+    # 7. python-magic으로 실제 콘텐츠 MIME 타입 검증
     if not validate_image_signature(content):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
