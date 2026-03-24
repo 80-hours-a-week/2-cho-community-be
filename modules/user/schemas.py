@@ -1,53 +1,59 @@
 """user_schemas: 사용자 관련 Pydantic 모델 모듈.
 
 사용자 등록, 수정, 비밀번호 변경, 탈퇴 요청 스키마를 정의합니다.
+Annotated + AfterValidator 패턴으로 검증 로직 재사용 (DRY).
 """
 
 import re
+from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, field_validator
 
 from schemas._image_validators import validate_profile_image_url
 
-VALID_DISTROS = frozenset(
-    {
-        "ubuntu",
-        "fedora",
-        "arch",
-        "debian",
-        "mint",
-        "opensuse",
-        "rocky",
-        "nixos",
-        "gentoo",
-        "other",
-    }
-)
+# Literal 타입으로 허용 배포판을 정의 — Pydantic v2 네이티브 검증 활용
+Distro = Literal[
+    "ubuntu",
+    "fedora",
+    "arch",
+    "debian",
+    "mint",
+    "opensuse",
+    "rocky",
+    "nixos",
+    "gentoo",
+    "other",
+]
 
-_PASSWORD_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$")
-_PASSWORD_ERROR = (
-    "비밀번호는 대문자, 소문자, 숫자, 특수문자(@, $, !, %, *, ?, &)를 포함하여 8자 이상 20자 이하여야 합니다."
-)
+# 패턴-에러 쌍을 하나의 딕셔너리로 관리하여 중복 구조 제거
+_FIELD_RULES: dict[str, tuple[re.Pattern[str], str]] = {
+    "password": (
+        re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$"),
+        "비밀번호는 대문자, 소문자, 숫자, 특수문자(@, $, !, %, *, ?, &)를 포함하여 8자 이상 20자 이하여야 합니다.",
+    ),
+    "nickname": (
+        re.compile(r"^[a-zA-Z0-9_]{3,10}$"),
+        "닉네임은 3자 이상 10자 이하의 영문, 숫자, 언더바로 구성하여야 합니다.",
+    ),
+}
 
-_NICKNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]{3,10}$")
-_NICKNAME_ERROR = "닉네임은 3자 이상 10자 이하의 영문, 숫자, 언더바로 구성하여야 합니다."
+
+def _make_checker(rule_key: str):
+    """_FIELD_RULES 키로 AfterValidator 콜백을 생성하는 팩토리."""
+    pattern, error_msg = _FIELD_RULES[rule_key]
+
+    def _checker(v: str) -> str:
+        if not pattern.match(v):
+            raise ValueError(error_msg)
+        return v
+
+    _checker.__qualname__ = f"_check_{rule_key}"
+    return _checker
 
 
-def _validate_password(v: str) -> str:
-    """비밀번호 형식을 검증합니다.
-
-    Args:
-        v: 입력된 비밀번호.
-
-    Returns:
-        검증된 비밀번호.
-
-    Raises:
-        ValueError: 비밀번호 형식이 올바르지 않은 경우.
-    """
-    if not _PASSWORD_PATTERN.match(v):
-        raise ValueError(_PASSWORD_ERROR)
-    return v
+# 재사용 타입 — Field 제약 + AfterValidator를 한 곳에서 정의
+Password = Annotated[str, Field(min_length=8, max_length=20), AfterValidator(_make_checker("password"))]
+Nickname = Annotated[str, Field(min_length=3, max_length=10), AfterValidator(_make_checker("nickname"))]
 
 
 class CreateUserRequest(BaseModel):
@@ -62,8 +68,8 @@ class CreateUserRequest(BaseModel):
     """
 
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=20)
-    nickname: str = Field(..., min_length=3, max_length=10)
+    password: Password
+    nickname: Nickname
     profileImageUrl: str | None = "/assets/profiles/default_profile.jpg"
     terms_agreed: bool
 
@@ -73,19 +79,6 @@ class CreateUserRequest(BaseModel):
         """이용약관 동의 여부를 검증합니다."""
         if not v:
             raise ValueError("서비스 이용을 위해 이용약관에 동의해야 합니다.")
-        return v
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        return _validate_password(v)
-
-    @field_validator("nickname")
-    @classmethod
-    def validate_nickname(cls, v: str) -> str:
-        """닉네임 형식을 검증합니다."""
-        if not _NICKNAME_PATTERN.match(v):
-            raise ValueError(_NICKNAME_ERROR)
         return v
 
     @field_validator("profileImageUrl")
@@ -107,30 +100,20 @@ class UpdateUserRequest(BaseModel):
         distro: 배포판 (선택).
     """
 
-    nickname: str | None = Field(None, min_length=3, max_length=10)
+    nickname: Nickname | None = None
     profileImageUrl: str | dict | None = None
-    distro: str | None = None
+    distro: Distro | Literal[""] | None = None
 
     @field_validator("distro")
     @classmethod
     def validate_distro(cls, v: str | None) -> str | None:
-        """배포판 값을 검증합니다."""
+        """배포판 해제(빈 문자열) 허용 + Literal 범위 외 값 거부."""
         if v is None:
             return None
         if v == "":
-            return ""  # 배포판 해제 요청
-        if v not in VALID_DISTROS:
-            raise ValueError(f"유효하지 않은 배포판입니다. 허용: {', '.join(sorted(VALID_DISTROS))}")
-        return v
-
-    @field_validator("nickname")
-    @classmethod
-    def validate_nickname(cls, v: str | None) -> str | None:
-        """닉네임 형식을 검증합니다."""
-        if v is None:
-            return None
-        if not _NICKNAME_PATTERN.match(v):
-            raise ValueError(_NICKNAME_ERROR)
+            return ""
+        if v not in get_args(Distro):
+            raise ValueError(f"유효하지 않은 배포판입니다. 허용: {', '.join(sorted(get_args(Distro)))}")
         return v
 
     @field_validator("profileImageUrl", mode="before")
@@ -150,13 +133,8 @@ class ChangePasswordRequest(BaseModel):
     """
 
     current_password: str
-    new_password: str = Field(..., min_length=8, max_length=20)
+    new_password: Password
     new_password_confirm: str
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, v: str) -> str:
-        return _validate_password(v)
 
 
 class WithdrawRequest(BaseModel):
@@ -173,17 +151,7 @@ class WithdrawRequest(BaseModel):
     @field_validator("agree")
     @classmethod
     def must_agree(cls, v: bool) -> bool:
-        """탈퇴 동의 여부를 검증합니다.
-
-        Args:
-            v: 동의 여부.
-
-        Returns:
-            검증된 동의 여부.
-
-        Raises:
-            ValueError: 동의하지 않은 경우.
-        """
+        """탈퇴 동의 여부를 검증합니다."""
         if not v:
             raise ValueError("계정을 삭제하기 전에 반드시 동의하여야 합니다.")
         return v
