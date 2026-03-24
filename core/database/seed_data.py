@@ -2,7 +2,7 @@
 
 사용법:
     source .venv/bin/activate
-    python database/seed_data.py [--scale small|medium|large]
+    python core/database/seed_data.py [--scale small|medium|large]
 
 생성되는 데이터 (small 기준):
     - 50 users (이메일 인증 완료, admin 1명, distro 분포 포함)

@@ -7,7 +7,7 @@ on:
       - '**.py'
       - 'pyproject.toml'
       - 'requirements*.txt'
-      - 'database/**'
+      - 'core/database/**'
       - '.github/workflows/python-app.yml'
   pull_request:
     branches: [ "main" ]
@@ -15,7 +15,7 @@ on:
       - '**.py'
       - 'pyproject.toml'
       - 'requirements*.txt'
-      - 'database/**'
+      - 'core/database/**'
       - '.github/workflows/python-app.yml'
   workflow_dispatch:
 

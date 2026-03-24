@@ -7,10 +7,10 @@
     source .venv/bin/activate
 
     # SSH 터널 경유 RDS 시딩
-    python database/seed_data_large.py --db-user admin --db-password SECRET --dry-run
+    python core/database/seed_data_large.py --db-user admin --db-password SECRET --dry-run
 
     # 로컬 MySQL 시딩
-    python database/seed_data_large.py --db-host 127.0.0.1 --db-port 3306 \\
+    python core/database/seed_data_large.py --db-host 127.0.0.1 --db-port 3306 \\
         --db-user root --db-password root --no-confirm
 
 사용자 티어:
@@ -322,13 +322,13 @@ def parse_args() -> argparse.Namespace:
         epilog="""\
 예시:
   # 로컬 MySQL
-  python database/seed_data_large.py --db-user root --db-password root --db-port 3306
+  python core/database/seed_data_large.py --db-user root --db-password root --db-port 3306
 
   # SSH 터널 경유 RDS (기본 포트 3307)
-  python database/seed_data_large.py --db-user admin --db-password SECRET
+  python core/database/seed_data_large.py --db-user admin --db-password SECRET
 
   # 기존 데이터 삭제 후 시딩
-  python database/seed_data_large.py --db-user admin --db-password SECRET --clean --no-confirm
+  python core/database/seed_data_large.py --db-user admin --db-password SECRET --clean --no-confirm
 """,
     )
     parser.add_argument("--db-host", default="127.0.0.1", help="DB 호스트 (기본: 127.0.0.1)")
