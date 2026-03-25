@@ -34,6 +34,9 @@ dependencies = [
     "Pillow>=11.0.0",
     "python-magic>=0.4.27",
     "httpx>=0.28.0",
+    "alembic>=1.13.0",
+    "sqlalchemy>=2.0.0",
+    "pymysql>=1.1.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +50,7 @@ k8s = [
 
 [tool.setuptools]
 find = {namespaces = true}
-packages = ["core", "core.database", "core.middleware", "core.dependencies", "core.utils", "modules", "modules.auth", "modules.auth.social", "modules.user", "modules.post", "modules.dm", "modules.notification", "modules.admin", "modules.content", "modules.wiki", "modules.package", "routers", "schemas"]
+packages = ["core", "core.database", "core.middleware", "core.dependencies", "core.utils", "modules", "modules.auth", "modules.auth.social", "modules.user", "modules.post", "modules.dm", "modules.notification", "modules.admin", "modules.content", "modules.wiki", "modules.package", "routers", "schemas", "migrations"]
 py-modules = ["main"]
 
 [tool.mypy]
@@ -73,6 +76,10 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = "load_tests.*"
 ignore_missing_imports = true
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "migrations.*"
 ignore_errors = true
 
 [tool.ruff]
@@ -114,6 +121,7 @@ ignore = [
 "modules/post/affinity_scorer.py" = ["RUF002", "RUF003"]
 "core/middleware/rate_limiter_memory.py" = ["S104"]
 "ws_app.py" = ["S110"]
+"migrations/**" = ["S", "T20", "N802", "E501"]
 
 [tool.ruff.format]
 quote-style = "double"
