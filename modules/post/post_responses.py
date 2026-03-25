@@ -40,6 +40,7 @@ class PostSummary(BaseModel):
     bookmarks_count: int = 0
     tags: list[TagSummary] = []
     is_read: bool = False
+    is_watching: bool = False
 
 
 class PostListResult(BaseModel):

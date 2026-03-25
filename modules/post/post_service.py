@@ -9,7 +9,7 @@ from core.utils.mention import extract_mentions
 from modules.content import category_models, tag_models
 from modules.notification import models as notification_models
 from modules.notification.setting_models import get_notification_settings
-from modules.post import poll_models, post_models
+from modules.post import poll_models, post_models, subscription_models
 from modules.post.bookmark_models import get_bookmark
 from modules.post.like_models import get_like
 from modules.post.post_responses import PostListResult
@@ -79,7 +79,7 @@ class PostService:
             blocked_user_ids=blocked_ids,
             tag=tag,
             author_ids=author_ids,
-            current_user_id=current_user.id if current_user and effective_sort == "for_you" else None,
+            current_user_id=current_user.id if current_user else None,
         )
         total_count = await post_models.get_total_posts_count(
             search=search,
@@ -157,7 +157,9 @@ class PostService:
     ) -> dict:
         """게시글 상세 조회 및 조회수 증가 처리."""
         # 1. 게시글 존재 확인
-        post_data = await post_models.get_post_with_details(post_id)
+        post_data = await post_models.get_post_with_details(
+            post_id, current_user_id=current_user.id if current_user else None
+        )
         if not post_data:
             raise not_found_error("post", timestamp)
 
@@ -210,6 +212,7 @@ class PostService:
             current_user_id=current_user.id if current_user else None,
             blocked_user_ids=blocked_ids,
             comment_sort=comment_sort,
+            accepted_answer_id=post_data.get("accepted_answer_id"),
         )
 
         # 6. 데이터 가공
@@ -289,6 +292,9 @@ class PostService:
                 await notification_models.create_notifications_bulk(bulk_rows)
         except Exception:
             logger.warning("팔로우 알림 생성 실패", exc_info=True)
+
+        # 게시글 작성자 자동 구독
+        await subscription_models.auto_subscribe(user_id, post.id)
 
         # 게시글 본문 멘션 알림 — 닉네임 일괄 조회로 N+1 방지
         nicknames = extract_mentions(post_data.content)

@@ -146,3 +146,15 @@ async def cleanup_tokens(
 ) -> dict:
     """만료된 토큰을 정리합니다 (관리자 또는 내부 호출)."""
     return await admin_controller.cleanup_tokens(request)
+
+
+@report_router.post("/v1/admin/digest/send", status_code=status.HTTP_200_OK)
+async def send_digest(
+    request: Request,
+    current_user: User | None = Depends(require_admin_or_internal),
+) -> dict:
+    """이메일 다이제스트 발송 (CronJob 호출용)."""
+    from modules.notification.digest_service import send_digests
+
+    results = await send_digests()
+    return {"status": "success", "data": results}

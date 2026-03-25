@@ -13,11 +13,13 @@ from modules.post import (
     like_controller,
     poll_controller,
     post_controller,
+    subscription_models,
 )
 from modules.post.comment_models import ALLOWED_COMMENT_SORT_OPTIONS
 from modules.post.comment_schemas import CreateCommentRequest, UpdateCommentRequest
 from modules.post.poll_schemas import PollVoteRequest
-from modules.post.post_schemas import CreatePostRequest, UpdatePostRequest
+from modules.post.post_schemas import AcceptAnswerRequest, CreatePostRequest, UpdatePostRequest
+from modules.post.subscription_schemas import SubscriptionRequest
 from modules.user.models import User
 
 post_router = APIRouter(prefix="/v1/posts", tags=["posts"])
@@ -234,6 +236,49 @@ async def unpin_post(
     return await post_controller.unpin_post(post_id, current_user, request)
 
 
+# ============ 답변 채택 라우터 ============
+
+
+@post_router.patch("/{post_id}/accepted-answer", status_code=status.HTTP_200_OK)
+async def accept_answer(
+    post_id: int,
+    body: AcceptAnswerRequest,
+    request: Request,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """Q&A 게시글의 답변을 채택합니다 (게시글 작성자만 가능).
+
+    Args:
+        post_id: 게시글 ID.
+        body: 채택할 댓글 ID를 포함한 요청.
+        request: FastAPI Request 객체.
+        current_user: 현재 인증된 사용자.
+
+    Returns:
+        채택 결과가 포함된 응답.
+    """
+    return await post_controller.accept_answer(post_id, body.comment_id, current_user, request)
+
+
+@post_router.delete("/{post_id}/accepted-answer", status_code=status.HTTP_200_OK)
+async def unaccept_answer(
+    post_id: int,
+    request: Request,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """Q&A 게시글의 답변 채택을 해제합니다 (게시글 작성자만 가능).
+
+    Args:
+        post_id: 게시글 ID.
+        request: FastAPI Request 객체.
+        current_user: 현재 인증된 사용자.
+
+    Returns:
+        채택 해제 결과가 포함된 응답.
+    """
+    return await post_controller.unaccept_answer(post_id, current_user, request)
+
+
 # ============ 좋아요 라우터 ============
 
 
@@ -370,6 +415,40 @@ async def unbookmark_post(
 ) -> dict:
     """북마크를 해제합니다."""
     return await bookmark_controller.unbookmark_post(post_id, current_user, request)
+
+
+# ============ 구독 라우터 ============
+
+
+@post_router.get("/{post_id}/subscription", status_code=status.HTTP_200_OK)
+async def get_subscription(
+    post_id: int,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """현재 사용자의 게시글 구독 수준을 조회합니다."""
+    level = await subscription_models.get_subscription_level(current_user.id, post_id)
+    return {"post_id": post_id, "level": level}
+
+
+@post_router.put("/{post_id}/subscription", status_code=status.HTTP_200_OK)
+async def set_subscription(
+    post_id: int,
+    body: SubscriptionRequest,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """게시글 구독 수준을 설정합니다 (watching 또는 muted)."""
+    await subscription_models.set_subscription(current_user.id, post_id, body.level)
+    return {"post_id": post_id, "level": body.level}
+
+
+@post_router.delete("/{post_id}/subscription", status_code=status.HTTP_200_OK)
+async def delete_subscription(
+    post_id: int,
+    current_user: User = Depends(require_verified_email),
+) -> dict:
+    """구독을 해제하여 기본 상태(normal)로 되돌립니다."""
+    await subscription_models.delete_subscription(current_user.id, post_id)
+    return {"post_id": post_id, "level": "normal"}
 
 
 # ============ 댓글 좋아요 라우터 ============

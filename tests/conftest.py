@@ -18,7 +18,7 @@ from main import app
 
 
 async def clear_all_data() -> None:
-    """테스트용 헬퍼: 31개 테이블 전체 TRUNCATE + 카테고리 시드 재삽입."""
+    """테스트용 헬퍼: 32개 테이블 전체 TRUNCATE + 카테고리 시드 재삽입."""
     async with get_connection() as conn, conn.cursor() as cur:
         await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
         await cur.execute("TRUNCATE TABLE wiki_page_tag")
@@ -39,6 +39,7 @@ async def clear_all_data() -> None:
         await cur.execute("TRUNCATE TABLE image")
         await cur.execute("TRUNCATE TABLE email_verification")
         await cur.execute("TRUNCATE TABLE post_view_log")
+        await cur.execute("TRUNCATE TABLE post_subscription")
         await cur.execute("TRUNCATE TABLE post_bookmark")
         await cur.execute("TRUNCATE TABLE comment_like")
         await cur.execute("TRUNCATE TABLE post_image")
