@@ -325,6 +325,18 @@ async def get_posts_with_details(
     elif sort == "for_you":
         sort = "latest"
 
+    # 구독 watching 상태 JOIN (로그인 사용자만)
+    watch_join = ""
+    watch_select = ", 0 AS is_watching"
+    watch_params: list = []
+    if current_user_id is not None:
+        watch_join = (
+            "LEFT JOIN post_subscription ps_watch "
+            "ON ps_watch.post_id = p.id AND ps_watch.user_id = %s AND ps_watch.level = 'watching'"
+        )
+        watch_select = ", IF(ps_watch.user_id IS NOT NULL, 1, 0) AS is_watching"
+        watch_params = [current_user_id]
+
     params.extend([limit, offset])
 
     async with get_cursor() as cur:
@@ -344,6 +356,7 @@ async def get_posts_with_details(
                      + p.views * 0.5)
                     / POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.5)
                     AS hot_score
+                    {watch_select}
                     {upc_select}
                 FROM post p
                 LEFT JOIN user u ON p.author_id = u.id
@@ -364,12 +377,13 @@ async def get_posts_with_details(
                     FROM post_bookmark
                     GROUP BY post_id
                 ) bk ON p.id = bk.post_id
+                {watch_join}
                 {upc_join}
                 WHERE {where}
                 ORDER BY p.is_pinned DESC, {order_by}
                 LIMIT %s OFFSET %s
                 """,
-            [*join_params, *params],
+            [*watch_params, *join_params, *params],
         )
         rows = await cur.fetchall()
 
@@ -394,29 +408,45 @@ async def get_posts_with_details(
                 "category_id": row["category_id"],
                 "category_name": row["category_name"],
                 "bookmarks_count": row["bookmarks_count"],
+                "is_watching": bool(row.get("is_watching", 0)),
             }
             for row in rows
         ]
 
 
-async def get_post_with_details(post_id: int) -> dict | None:
+async def get_post_with_details(post_id: int, current_user_id: int | None = None) -> dict | None:
     """특정 게시글을 작성자 정보, 좋아요 수, 북마크 수와 함께 조회합니다."""
+    # 구독 watching 상태 JOIN (로그인 사용자만)
+    watch_join = ""
+    watch_select = ", 0 AS is_watching"
+    watch_params: list = []
+    if current_user_id is not None:
+        watch_join = (
+            "LEFT JOIN post_subscription ps_watch "
+            "ON ps_watch.post_id = p.id AND ps_watch.user_id = %s AND ps_watch.level = 'watching'"
+        )
+        watch_select = ", IF(ps_watch.user_id IS NOT NULL, 1, 0) AS is_watching"
+        watch_params = [current_user_id]
+
     async with get_cursor() as cur:
         await cur.execute(
-            """
+            f"""
                 SELECT p.id AS post_id, p.title, p.content, p.image_url,
                        p.views AS views_count, p.created_at, p.updated_at,
+                       p.accepted_answer_id,
                        u.id AS author_user_id, u.nickname AS author_nickname,
                        u.profile_img AS author_profile_img, u.distro AS author_distro,
                        (SELECT COUNT(*) FROM post_like WHERE post_id = p.id) AS likes_count,
                        p.is_pinned, p.category_id, cat.name AS category_name,
                        (SELECT COUNT(*) FROM post_bookmark WHERE post_id = p.id) AS bookmarks_count
+                       {watch_select}
                 FROM post p
                 LEFT JOIN user u ON p.author_id = u.id
                 LEFT JOIN category cat ON p.category_id = cat.id
+                {watch_join}
                 WHERE p.id = %s AND p.deleted_at IS NULL
                 """,
-            (post_id,),
+            [*watch_params, post_id],
         )
         row = await cur.fetchone()
 
@@ -431,6 +461,7 @@ async def get_post_with_details(post_id: int) -> dict | None:
             "views_count": row["views_count"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "accepted_answer_id": row.get("accepted_answer_id"),
             "author": build_author_dict(
                 row["author_user_id"],
                 row["author_nickname"],
@@ -442,6 +473,7 @@ async def get_post_with_details(post_id: int) -> dict | None:
             "category_id": row["category_id"],
             "category_name": row["category_name"],
             "bookmarks_count": row["bookmarks_count"],
+            "is_watching": bool(row.get("is_watching", 0)),
         }
 
 

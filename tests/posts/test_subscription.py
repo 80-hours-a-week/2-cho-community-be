@@ -229,3 +229,88 @@ async def test_no_reply_notification_if_muted(client: AsyncClient, fake, db):
     notifs = res.json()["data"]["notifications"]
     reply_notifs = [n for n in notifs if n["type"] == "reply"]
     assert len(reply_notifs) == 0
+
+
+# ---------------------------------------------------------------------------
+# is_watching 필드 포함 테스트
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_list_includes_is_watching(client: AsyncClient, fake, db):
+    """게시글 목록에 is_watching 필드가 포함된다 (작성자는 자동 구독으로 True)."""
+    user = await create_verified_user(client, fake)
+    post = await create_test_post(client, user["headers"])
+
+    res = await client.get("/v1/posts/", headers=user["headers"])
+    assert res.status_code == 200
+
+    posts = res.json()["data"]["posts"]
+    target = [p for p in posts if p["post_id"] == post["post_id"]]
+    assert len(target) == 1
+    assert target[0]["is_watching"] is True
+
+
+@pytest.mark.asyncio
+async def test_post_list_is_watching_false_for_non_subscriber(client: AsyncClient, fake, db):
+    """게시글 목록에서 구독하지 않은 사용자의 is_watching은 False이다."""
+    author = await create_verified_user(client, fake)
+    reader = await create_verified_user(client, fake)
+    post = await create_test_post(client, author["headers"])
+
+    res = await client.get("/v1/posts/", headers=reader["headers"])
+    assert res.status_code == 200
+
+    posts = res.json()["data"]["posts"]
+    target = [p for p in posts if p["post_id"] == post["post_id"]]
+    assert len(target) == 1
+    assert target[0]["is_watching"] is False
+
+
+@pytest.mark.asyncio
+async def test_post_list_is_watching_false_for_anonymous(client: AsyncClient, fake, db):
+    """비로그인 사용자의 게시글 목록에서 is_watching은 False이다."""
+    author = await create_verified_user(client, fake)
+    await create_test_post(client, author["headers"])
+
+    res = await client.get("/v1/posts/")
+    assert res.status_code == 200
+
+    posts = res.json()["data"]["posts"]
+    assert len(posts) >= 1
+    assert posts[0]["is_watching"] is False
+
+
+@pytest.mark.asyncio
+async def test_post_detail_includes_is_watching(client: AsyncClient, fake, db):
+    """게시글 상세에 is_watching 필드가 포함된다 (작성자는 자동 구독으로 True)."""
+    user = await create_verified_user(client, fake)
+    post = await create_test_post(client, user["headers"])
+
+    res = await client.get(f"/v1/posts/{post['post_id']}", headers=user["headers"])
+    assert res.status_code == 200
+    assert res.json()["data"]["post"]["is_watching"] is True
+
+
+@pytest.mark.asyncio
+async def test_post_detail_is_watching_false_for_non_subscriber(client: AsyncClient, fake, db):
+    """게시글 상세에서 구독하지 않은 사용자의 is_watching은 False이다."""
+    author = await create_verified_user(client, fake)
+    reader = await create_verified_user(client, fake)
+    post = await create_test_post(client, author["headers"])
+
+    res = await client.get(f"/v1/posts/{post['post_id']}", headers=reader["headers"])
+    assert res.status_code == 200
+    assert res.json()["data"]["post"]["is_watching"] is False
+
+
+@pytest.mark.asyncio
+async def test_post_detail_accepted_answer_id(client: AsyncClient, fake, db):
+    """게시글 상세에 accepted_answer_id 필드가 포함된다."""
+    user = await create_verified_user(client, fake)
+    post = await create_test_post(client, user["headers"])
+
+    res = await client.get(f"/v1/posts/{post['post_id']}", headers=user["headers"])
+    assert res.status_code == 200
+    assert "accepted_answer_id" in res.json()["data"]["post"]
+    assert res.json()["data"]["post"]["accepted_answer_id"] is None
