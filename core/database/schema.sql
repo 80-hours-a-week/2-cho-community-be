@@ -74,8 +74,7 @@ CREATE TABLE post (
     deleted_at TIMESTAMP NULL,
     accepted_answer_id INT UNSIGNED NULL,
     FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE SET NULL,
-    FOREIGN KEY (category_id) REFERENCES category (id) ON DELETE SET NULL,
-    FOREIGN KEY (accepted_answer_id) REFERENCES comment (id) ON DELETE SET NULL
+    FOREIGN KEY (category_id) REFERENCES category (id) ON DELETE SET NULL
 );
 
 -- 댓글 테이블
@@ -92,6 +91,10 @@ CREATE TABLE comment (
     FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES comment (id) ON DELETE SET NULL
 );
+
+-- post.accepted_answer_id FK (comment 테이블 생성 후 추가)
+ALTER TABLE post ADD CONSTRAINT fk_post_accepted_answer
+    FOREIGN KEY (accepted_answer_id) REFERENCES comment (id) ON DELETE SET NULL;
 
 -- 좋아요 테이블
 CREATE TABLE post_like (
