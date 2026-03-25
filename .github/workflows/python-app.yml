@@ -8,6 +8,7 @@ on:
       - 'pyproject.toml'
       - 'requirements*.txt'
       - 'core/database/**'
+      - 'migrations/**'
       - '.github/workflows/python-app.yml'
   pull_request:
     branches: [ "main" ]
@@ -16,6 +17,7 @@ on:
       - 'pyproject.toml'
       - 'requirements*.txt'
       - 'core/database/**'
+      - 'migrations/**'
       - '.github/workflows/python-app.yml'
   workflow_dispatch:
 
@@ -68,6 +70,16 @@ jobs:
         MYSQL_PWD: testpassword
       run: |
         mysql -h 127.0.0.1 -u root community_service < core/database/schema.sql
+
+    - name: Stamp Alembic baseline
+      env:
+        DB_HOST: "127.0.0.1"
+        DB_PORT: "3306"
+        DB_USER: "root"
+        DB_PASSWORD: "testpassword"
+        DB_NAME: "community_service"
+        SECRET_KEY: ci-alembic-stamp
+      run: uv run alembic stamp head
 
     - name: Run tests
       env:
