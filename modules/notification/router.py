@@ -24,6 +24,7 @@ class NotificationSettingsRequest(BaseModel):
     mention: bool | None = None
     follow: bool | None = None
     bookmark: bool | None = None
+    reply: bool | None = None
 
 
 @router.get("/")

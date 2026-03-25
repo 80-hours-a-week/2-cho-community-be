@@ -13,6 +13,7 @@ DEFAULT_SETTINGS = {
     "mention": True,
     "follow": True,
     "bookmark": True,
+    "reply": True,
 }
 
 _TYPE_TO_COLUMN = {
@@ -21,6 +22,7 @@ _TYPE_TO_COLUMN = {
     "mention": "mention_enabled",
     "follow": "follow_enabled",
     "bookmark": "bookmark_enabled",
+    "reply": "reply_enabled",
 }
 
 
@@ -30,7 +32,7 @@ async def get_notification_settings(user_id: int) -> dict[str, bool]:
         await cur.execute(
             """
                 SELECT comment_enabled, like_enabled, mention_enabled,
-                       follow_enabled, bookmark_enabled
+                       follow_enabled, bookmark_enabled, reply_enabled
                 FROM notification_setting
                 WHERE user_id = %s
                 """,
@@ -47,6 +49,7 @@ async def get_notification_settings(user_id: int) -> dict[str, bool]:
         "mention": bool(row["mention_enabled"]),
         "follow": bool(row["follow_enabled"]),
         "bookmark": bool(row["bookmark_enabled"]),
+        "reply": bool(row["reply_enabled"]),
     }
 
 
@@ -62,14 +65,15 @@ async def update_notification_settings(user_id: int, settings: dict[str, bool]) 
             """
             INSERT INTO notification_setting
                 (user_id, comment_enabled, like_enabled, mention_enabled,
-                 follow_enabled, bookmark_enabled)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                 follow_enabled, bookmark_enabled, reply_enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 comment_enabled = VALUES(comment_enabled),
                 like_enabled = VALUES(like_enabled),
                 mention_enabled = VALUES(mention_enabled),
                 follow_enabled = VALUES(follow_enabled),
-                bookmark_enabled = VALUES(bookmark_enabled)
+                bookmark_enabled = VALUES(bookmark_enabled),
+                reply_enabled = VALUES(reply_enabled)
             """,
             (
                 user_id,
@@ -78,6 +82,7 @@ async def update_notification_settings(user_id: int, settings: dict[str, bool]) 
                 merged["mention"],
                 merged["follow"],
                 merged["bookmark"],
+                merged["reply"],
             ),
         )
 
