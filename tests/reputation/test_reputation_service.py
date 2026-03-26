@@ -91,19 +91,10 @@ async def test_award_points_badge_adds_bonus_points(client: AsyncClient, fake):
     user = await create_verified_user(client, fake)
     user_id = user["user_id"]
 
-    # 실제 게시글 생성
+    # Act — API를 통해 게시글 생성 → post_created 이벤트 (5점) + First Post 배지 보너스 (5점)
     await create_test_post(client, user["headers"])
 
-    # Act — post_created 이벤트 (5점) + First Post 배지 보너스 (5점)
-    await ReputationService.award_points(
-        user_id=user_id,
-        event_type="post_created",
-        points=5,
-        source_type="post",
-        source_id=1,
-    )
-
-    # Assert — 기본 5점 + 배지 보너스 5점 = 10점
+    # Assert — post_created 5점 + First Post 배지 보너스 5점 = 10점
     score = await rep_models.get_user_reputation_score(user_id)
     assert score == 10
 
