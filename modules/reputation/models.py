@@ -264,8 +264,10 @@ async def award_badge(user_id: int, badge_id: int) -> bool:
                 (user_id, badge_id),
             )
         return True
-    except IntegrityError:
-        return False
+    except IntegrityError as e:
+        if e.args[0] == 1062:  # 중복 키
+            return False
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +363,7 @@ async def count_user_package_reviews(user_id: int) -> int:
     """사용자가 작성한 패키지 리뷰 수를 반환합니다."""
     async with get_cursor() as cur:
         await cur.execute(
-            "SELECT COUNT(*) AS cnt FROM package_review WHERE user_id = %s",
+            "SELECT COUNT(*) AS cnt FROM package_review WHERE user_id = %s AND deleted_at IS NULL",
             (user_id,),
         )
         row = await cur.fetchone()
@@ -462,8 +464,10 @@ async def record_daily_visit(user_id: int) -> bool:
                 (user_id, today),
             )
         return True
-    except IntegrityError:
-        return False
+    except IntegrityError as e:
+        if e.args[0] == 1062:  # 중복 키
+            return False
+        raise
 
 
 async def get_consecutive_visit_days(user_id: int) -> int:

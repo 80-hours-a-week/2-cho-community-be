@@ -29,7 +29,7 @@ EVENT_TO_BADGE_TRIGGERS: dict[str, list[str]] = {
     "package_review_created": ["package_review_count"],
     "bookmark_created": ["bookmark_count"],
     "dm_sent": ["dm_sent_count"],
-    "post_viewed": ["post_view_count"],
+    "post_viewed": ["post_view_count", "single_post_views"],
     "follower_gained": ["follower_count"],
     "profile_updated": ["profile_completed"],
     "reputation_changed": ["reputation_score"],
