@@ -233,6 +233,15 @@ class ReputationService:
         if trigger_type == "consecutive_visit_days":
             return await rep_models.get_consecutive_visit_days(user_id)
 
+        # per-object 트리거에 source_id가 없으면 경고
+        if trigger_type in ("single_post_likes", "single_post_views", "single_comment_likes"):
+            logger.warning(
+                "per-object trigger '%s' 호출 시 source_id 누락 (user_id=%s)",
+                trigger_type,
+                user_id,
+            )
+            return 0
+
         # 나머지 — user_id 기반 집계 함수
         func = _TRIGGER_COUNT_FUNCS.get(trigger_type)
         if func is not None:
