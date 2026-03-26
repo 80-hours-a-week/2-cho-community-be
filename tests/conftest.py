@@ -4,6 +4,7 @@ import sys
 # Rate Limiter 우회를 위한 테스트 환경 변수 설정
 os.environ["TESTING"] = "true"
 
+import aiomysql
 import pytest
 import pytest_asyncio
 from faker import Faker
@@ -19,7 +20,7 @@ from main import app
 
 async def clear_all_data() -> None:
     """테스트용 헬퍼: 35개 테이블 전체 TRUNCATE + 시드 데이터 재삽입."""
-    async with get_connection() as conn, conn.cursor() as cur:
+    async with get_connection() as conn, conn.cursor(aiomysql.DictCursor) as cur:
         await cur.execute("SET FOREIGN_KEY_CHECKS = 0")
         # 평판 시스템 테이블 (자식 우선)
         await cur.execute("TRUNCATE TABLE user_badge")
