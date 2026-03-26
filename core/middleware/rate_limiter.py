@@ -95,7 +95,7 @@ RATE_LIMIT_CONFIG = {
     # 내부 배치 작업 (EventBridge 호출)
     "POST:/v1/admin/cleanup/tokens": {"max_requests": 5, "window_seconds": 60},
     "POST:/v1/admin/feed/recompute": {"max_requests": 5, "window_seconds": 60},
-    # Phase 4 엔드포인트 (경로 정규화 후 매칭)
+    # 북마크·구독·투표 등 (경로 정규화 후 매칭)
     "POST:/v1/posts/{id}/bookmark": {"max_requests": 30, "window_seconds": 60},
     "DELETE:/v1/posts/{id}/bookmark": {"max_requests": 30, "window_seconds": 60},
     "POST:/v1/posts/{id}/comments/{id}/like": {"max_requests": 30, "window_seconds": 60},

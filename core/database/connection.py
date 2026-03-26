@@ -69,7 +69,7 @@ def get_pool() -> aiomysql.Pool:
 
 
 @asynccontextmanager
-async def _acquire_dict_cursor() -> AsyncGenerator[tuple[aiomysql.Connection, aiomysql.DictCursor], None]:
+async def _acquire_dict_cursor() -> AsyncGenerator[tuple[aiomysql.Connection, aiomysql.DictCursor]]:
     """풀에서 연결을 획득하고 DictCursor를 여는 내부 헬퍼.
 
     get_cursor()와 transactional()이 공유하여 중복을 제거합니다.
@@ -80,7 +80,7 @@ async def _acquire_dict_cursor() -> AsyncGenerator[tuple[aiomysql.Connection, ai
 
 
 @asynccontextmanager
-async def get_connection() -> AsyncGenerator[aiomysql.Connection, None]:
+async def get_connection() -> AsyncGenerator[aiomysql.Connection]:
     """데이터베이스 연결을 컨텍스트 매니저로 제공합니다. (하위 호환성용)"""
     pool = get_pool()
     async with pool.acquire() as conn:
@@ -88,14 +88,14 @@ async def get_connection() -> AsyncGenerator[aiomysql.Connection, None]:
 
 
 @asynccontextmanager
-async def get_cursor() -> AsyncGenerator[aiomysql.DictCursor, None]:
+async def get_cursor() -> AsyncGenerator[aiomysql.DictCursor]:
     """DictCursor를 컨텍스트 매니저로 제공합니다. (읽기 전용 쿼리용)"""
     async with _acquire_dict_cursor() as (_conn, cur):
         yield cur
 
 
 @asynccontextmanager
-async def transactional() -> AsyncGenerator[aiomysql.DictCursor, None]:
+async def transactional() -> AsyncGenerator[aiomysql.DictCursor]:
     """트랜잭션 컨텍스트 매니저. 예외 시 롤백, 정상 종료 시 커밋. DictCursor 반환."""
     async with _acquire_dict_cursor() as (conn, cur):
         try:

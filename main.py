@@ -108,10 +108,9 @@ if settings.DEBUG:
 # 이중 게이트: TESTING=true + (DEBUG=true OR CI 환경)에서만 허용
 if settings.TESTING:
     if not settings.DEBUG and not os.environ.get("CI"):
-        import logging as _logging
-
-        _logging.getLogger(__name__).critical(
-            "TESTING=true이지만 DEBUG=false입니다. 프로덕션에서 테스트 라우터가 활성화될 수 있습니다."
+        raise RuntimeError(
+            "TESTING=true이지만 DEBUG=false이고 CI 환경이 아닙니다. "
+            "프로덕션에서 테스트 라우터 활성화는 허용되지 않습니다."
         )
     from routers.test_router import test_router
 

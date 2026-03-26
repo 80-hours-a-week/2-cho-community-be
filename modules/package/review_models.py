@@ -117,6 +117,9 @@ async def get_reviews_count(package_id: int) -> int:
         return row["cnt"] if row else 0
 
 
+ALLOWED_REVIEW_UPDATE_COLUMNS = {"rating", "title", "content"}
+
+
 async def update_review(
     review_id: int,
     rating: int | None = None,
@@ -127,15 +130,13 @@ async def update_review(
     updates: list[str] = []
     params: list = []
 
-    if rating is not None:
-        updates.append("rating = %s")
-        params.append(rating)
-    if title is not None:
-        updates.append("title = %s")
-        params.append(title)
-    if content is not None:
-        updates.append("content = %s")
-        params.append(content)
+    field_map = {"rating": rating, "title": title, "content": content}
+    for col, val in field_map.items():
+        if val is not None:
+            if col not in ALLOWED_REVIEW_UPDATE_COLUMNS:
+                raise ValueError(f"허용되지 않은 컬럼: {col}")
+            updates.append(f"{col} = %s")
+            params.append(val)
 
     if not updates:
         return False
