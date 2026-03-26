@@ -105,8 +105,10 @@ async def save_uploaded_file(file: UploadFile, folder: str = "images") -> str:
             },
         )
 
-    # 7. python-magic으로 실제 콘텐츠 MIME 타입 검증
-    if not validate_image_signature(content):
+    # 7. python-magic으로 실제 콘텐츠 MIME 타입 검증 — libmagic C 호출, 이벤트 루프 차단 방지
+    import asyncio
+
+    if not await asyncio.to_thread(validate_image_signature, content):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -116,7 +118,6 @@ async def save_uploaded_file(file: UploadFile, folder: str = "images") -> str:
         )
 
     # 8. Resize image based on folder (purpose) — CPU 바운드, 이벤트 루프 차단 방지
-    import asyncio
 
     from core.utils.image_resize import resize_for_post, resize_for_profile
 

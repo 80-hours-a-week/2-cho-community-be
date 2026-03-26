@@ -220,7 +220,7 @@ async def get_messages(conversation_id: int, offset: int = 0, limit: int = 50) -
     """대화의 메시지 목록을 페이지네이션하여 반환합니다."""
     async with get_cursor() as cur:
         await cur.execute(
-            "SELECT COUNT(*) AS cnt FROM dm_message WHERE conversation_id = %s",
+            "SELECT COUNT(*) AS cnt FROM dm_message WHERE conversation_id = %s AND deleted_at IS NULL",
             (conversation_id,),
         )
         total_count = (await cur.fetchone())["cnt"]

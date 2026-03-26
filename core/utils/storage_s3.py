@@ -103,7 +103,7 @@ async def save_uploaded_file_s3(file: UploadFile, folder: str = "images") -> str
             },
         )
 
-    if not validate_image_signature(content):
+    if not await asyncio.to_thread(validate_image_signature, content):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -112,13 +112,13 @@ async def save_uploaded_file_s3(file: UploadFile, folder: str = "images") -> str
             },
         )
 
-    # Resize image based on folder (purpose)
+    # Resize image based on folder (purpose) — CPU 바운드, 이벤트 루프 차단 방지
     from core.utils.image_resize import resize_for_post, resize_for_profile
 
     if folder == "profiles":
-        content = resize_for_profile(content)
+        content = await asyncio.to_thread(resize_for_profile, content)
     elif folder in ("posts", "images"):
-        content = resize_for_post(content)
+        content = await asyncio.to_thread(resize_for_post, content)
 
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     key = f"{S3_UPLOADS_PREFIX}/{folder}/{unique_filename}"
