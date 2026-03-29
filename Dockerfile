@@ -6,7 +6,9 @@ LABEL maintainer="my-community"
 LABEL version="${APP_VERSION}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_CACHE_DIR=/app/.cache/uv \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
@@ -22,11 +24,15 @@ RUN apt-get update && \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --extra k8s --no-install-project
 
+# 비특권 사용자 (컨테이너 보안)
+RUN groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
+
 # 애플리케이션 코드
 COPY . .
 RUN uv sync --frozen --no-dev --extra k8s
-RUN mkdir -p assets/posts assets/profiles
+RUN mkdir -p assets/posts assets/profiles && chown -R appuser:appuser assets/
 
+USER appuser
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
