@@ -2,7 +2,7 @@
 
 import logging
 
-from core.utils.exceptions import bad_request_error, forbidden_error, not_found_error
+from core.utils.exceptions import bad_request_error, conflict_error, forbidden_error, not_found_error
 from modules.content import tag_models
 from modules.wiki import models as wiki_models
 from modules.wiki.schemas import CreateWikiPageRequest, UpdateWikiPageRequest
@@ -102,7 +102,7 @@ class WikiService:
         Returns:
             생성된 위키 페이지 ID.
         """
-        # 슬러그 중복 검사
+        # 슬러그 중복 검사 (빠른 사전 검증)
         if await wiki_models.slug_exists(data.slug):
             raise bad_request_error(
                 "SLUG_DUPLICATE",
@@ -110,12 +110,18 @@ class WikiService:
                 "이미 사용 중인 슬러그입니다.",
             )
 
-        wiki_page_id = await wiki_models.create_wiki_page(
-            title=data.title,
-            slug=data.slug,
-            content=data.content,
-            author_id=user_id,
-        )
+        # UNIQUE 제약으로 동시 생성 시에도 정합성 보장 (TOCTOU 방어)
+        try:
+            wiki_page_id = await wiki_models.create_wiki_page(
+                title=data.title,
+                slug=data.slug,
+                content=data.content,
+                author_id=user_id,
+            )
+        except Exception as e:
+            if "Duplicate entry" in str(e):
+                raise conflict_error("wiki_slug", timestamp, "이미 사용 중인 슬러그입니다.") from e
+            raise
 
         # 태그 처리
         if data.tags:
