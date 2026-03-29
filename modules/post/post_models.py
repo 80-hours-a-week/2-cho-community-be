@@ -14,6 +14,21 @@ from schemas.common import build_author_dict
 # 게시글당 허용되는 최대 이미지 수
 MAX_POST_IMAGES = 5
 
+
+def hot_score_sql(likes_alias: str = "likes", comments_alias: str = "comments") -> str:
+    """Hot Score SQL 수식을 반환합니다.
+
+    가중치: 좋아요 x3, 댓글 x2, 조회 x0.5 / 시간 감쇠(1.5제곱)
+    수식 변경 시 이 함수만 수정하면 모든 쿼리에 반영됩니다.
+    """
+    return (
+        f"(COALESCE({likes_alias}.cnt, 0) * 3"
+        f" + COALESCE({comments_alias}.cnt, 0) * 2"
+        f" + p.views * 0.5)"
+        f" / POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.5)"
+    )
+
+
 # SQL Injection 방지: 허용된 컬럼명 whitelist
 ALLOWED_POST_COLUMNS = {"title", "content", "image_url", "category_id", "updated_at"}
 
@@ -352,11 +367,7 @@ async def get_posts_with_details(
                     p.is_pinned, p.category_id, cat.name AS category_name,
                     COALESCE(bk.cnt, 0) AS bookmarks_count,
                     (p.accepted_answer_id IS NOT NULL) AS is_solved,
-                    (COALESCE(likes.cnt, 0) * 3
-                     + COALESCE(comments.cnt, 0) * 2
-                     + p.views * 0.5)
-                    / POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.5)
-                    AS hot_score
+                    {hot_score_sql()} AS hot_score
                     {watch_select}
                     {upc_select}
                 FROM post p
@@ -604,11 +615,7 @@ async def get_related_posts(
                     COALESCE(bk.cnt, 0) AS bookmarks_count,
                     {tag_select},
                     {same_category},
-                    (COALESCE(likes.cnt, 0) * 3
-                     + COALESCE(comments.cnt, 0) * 2
-                     + p.views * 0.5)
-                    / POW(TIMESTAMPDIFF(HOUR, p.created_at, NOW()) + 2, 1.5)
-                    AS hot_score
+                    {hot_score_sql()} AS hot_score
                 FROM post p
                 LEFT JOIN user u ON p.author_id = u.id
                 LEFT JOIN category cat ON p.category_id = cat.id
