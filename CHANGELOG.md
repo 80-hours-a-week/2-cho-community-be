@@ -1,6 +1,31 @@
 # Changelog
 
+## 2026-04 (Apr)
+
+- **04-02: 버그 수정 및 코드 품질**
+  - refactor: 코드 퀄리티 향상
+  - fix: 위키 탐색 버그 해결
+  - fix: OAuth 라우팅 이슈 수정
+
 ## 2026-03 (Mar)
+
+- **03-31: 컨테이너 보안**
+  - fix: appuser UID/GID를 1000으로 고정 (non-root 컨테이너 보안)
+
+- **03-29: 코드베이스 품질 개선**
+  - fix: Docker 헬스체크 — curl 설치 + HEALTHCHECK 추가
+  - fix: Build & CI — 멀티스테이지 빌드 최적화, deploy 워크플로우 개선
+  - fix: Observability — 구조화 로깅 (JSON), RequestID 미들웨어, DB 커넥션 풀 모니터링
+  - fix: Code Quality — 알림 설정 모델 리팩터링, 게시글/댓글 서비스 쿼리 최적화
+  - fix: Lifecycle — S3 스토리지 오류 처리 개선, 위키 서비스 리팩터링, WS graceful shutdown
+
+- **03-29: 지식 품질 (Knowledge Quality) 기능**
+  - feat: 위키 리비전 시스템 — 생성/수정 시 리비전 자동 생성, diff 엔진 (unified diff)
+  - feat: 위키 리비전 API — `/{slug}/history`, `/{slug}/revisions/{n}`, `/{slug}/diff`, `/{slug}/rollback/{n}`
+  - feat: 태그 상세 조회/수정 API — `GET /v1/tags/{tag_name}`, `PUT /v1/tags/{tag_name}` (description, body 컬럼)
+  - feat: 게시글 목록 solved 필터 — `?solved=true|false` (Q&A 해결/미해결 필터)
+  - feat: `wiki_page_revision` 테이블 추가 (38개 테이블)
+  - feat: `tag` 테이블에 `description`, `body`, `updated_by` 컬럼 추가
 
 - feat: Alembic 마이그레이션 관리 도입 — 버전 관리 + 롤백, K8s PreSync Job 자동 실행
 - chore: 레거시 migration_*.sql 10개 파일 삭제 (Alembic으로 대체)
@@ -12,7 +37,7 @@
 - feat: send_email() HTML 지원 (multipart/alternative)
 
 - **03-17: 위키 FAQ/지식베이스 시스템**
-  - `wiki_page`, `wiki_page_tag` 테이블 추가 (31개 테이블)
+  - `wiki_page`, `wiki_page_tag` 테이블 추가
   - 위키 CRUD API (`/v1/wiki`), 태그 연동, 슬러그 기반 조회, 조회수
 
 - **03-16: 패키지 리뷰 시스템**

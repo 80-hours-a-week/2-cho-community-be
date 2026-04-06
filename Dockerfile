@@ -1,5 +1,5 @@
 # K8s 환경용 FastAPI 이미지 (Lambda와 별도)
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:739e7213785e88c0f702dcdc12c0973afcbd606dbf021a589cab77d6b00b579d
 
 ARG APP_VERSION=dev
 LABEL maintainer="my-community"
@@ -25,7 +25,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --extra k8s --no-install-project
 
 # 비특권 사용자 (컨테이너 보안)
-RUN groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
+RUN groupadd -r -g 1000 appuser && useradd -r -u 1000 -g appuser -s /sbin/nologin appuser
 
 # 애플리케이션 코드
 COPY . .
